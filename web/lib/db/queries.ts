@@ -36,13 +36,21 @@ export async function countRegisteredGuests(invitationId: string) {
 }
 
 export async function getGuestUsage(invitationCode: string) {
-  const invitation = await getInvitationByCode(invitationCode);
-  if (!invitation) throw new Error("Invitation not found");
-  const registered = await countRegisteredGuests(invitation.id);
+  const db = getDb();
+  const rows = await db
+    .select({ invitation: invitations, studentName: students.name })
+    .from(invitations)
+    .innerJoin(students, eq(invitations.studentId, students.id))
+    .where(eq(invitations.invitationCode, invitationCode))
+    .limit(1);
+  const found = rows[0];
+  if (!found) throw new Error("Invitation not found");
+  const registered = await countRegisteredGuests(found.invitation.id);
   return {
-    invitation,
+    invitation: found.invitation,
+    studentName: found.studentName,
     registered,
-    remaining: invitation.guestLimit - registered,
+    remaining: found.invitation.guestLimit - registered,
   };
 }
 
