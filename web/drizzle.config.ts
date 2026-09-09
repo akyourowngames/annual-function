@@ -8,11 +8,11 @@ export default {
   out: "./drizzle/migrations",
   dialect: "postgresql",
   dbCredentials: {
-    // NOTE: no sslmode/options here on purpose. Supavisor (pooler :6543)
-    // presents a chain Windows pg rejects (SELF_SIGNED_CERT_IN_CHAIN);
-    // trust is configured below via `ssl` instead (drizzle-kit passes
-    // this through to the pg driver).
+    // Supavisor (pooler :6543) presents a chain Windows TLS rejects
+    // (SELF_SIGNED_CERT_IN_CHAIN). `?sslmode=require` in the URL makes BOTH
+    // drivers skip cert verification: pg-connection-string (drizzle-kit's
+    // 'pg' driver) AND postgres.js (app runtime in lib/db/index.ts) both map
+    // sslmode=require -> rejectUnauthorized: false.
     url: process.env.DATABASE_URL!,
-    ssl: { rejectUnauthorized: false },
   },
 } satisfies Config;

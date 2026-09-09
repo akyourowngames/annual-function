@@ -6,7 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
