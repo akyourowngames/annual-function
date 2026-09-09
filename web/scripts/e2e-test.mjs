@@ -20,6 +20,20 @@ const { config } = await import("dotenv");
 config({ path: fileURLToPath(new URL("../.env.local", import.meta.url)) });
 const postgres = (await import("postgres")).default;
 const sql = postgres(process.env.DATABASE_URL);
+
+// --- reset state created by previous runs so the test is repeatable ---
+await sql`delete from check_ins where invitation_id in (
+  select i.id from invitations i join students s on s.id = i.student_id
+  where s.student_id in ('10234', '99999'))`;
+await sql`delete from guests where invitation_id in (
+  select i.id from invitations i join students s on s.id = i.student_id
+  where s.student_id in ('10234', '99999'))`;
+await sql`delete from support_tickets where student_id in (
+  select id from students where student_id in ('10234', '99999'))`;
+await sql`delete from invitations where student_id in (
+  select id from students where student_id = '99999')`;
+await sql`delete from students where student_id = '99999'`;
+
 const row = (
   await sql`select i.invitation_code AS code, i.qr_token AS token, i.guest_limit AS lim
             from invitations i join students s on s.id = i.student_id
