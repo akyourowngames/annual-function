@@ -46,3 +46,5 @@ __pycache__/
 pip-install.log
 npm-install.log
 npm-install.err.log
+*.log
+.tmp-*
