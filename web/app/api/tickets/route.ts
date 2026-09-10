@@ -1,57 +1,75 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createTicket, listTickets } from "@/lib/db/queries";
-
-/** GET /api/tickets — all tickets, or ?studentId=10234 for one student. */
+import { eq } from "drizzle-orm";
+import { createTicket, listTickets, studentForCode } from "@/lib/db/queries";
+import { getDb } from "@/lib/db";
+import { supportTickets } from "@/lib/db/schema";
+import { requireStaff } from "@/lib/server/auth";
+import {
+  body,
+  fail,
+  HttpError,
+  sameOrigin,
+  text,
+  uuid,
+} from "@/lib/server/http";
 export async function GET(request: NextRequest) {
-  const studentId = request.nextUrl.searchParams.get("studentId")?.trim();
   try {
-    const rows = await listTickets(studentId || undefined);
+    const code = request.nextUrl.searchParams.get("code");
+    let studentId: string | undefined;
+    if (code)
+      studentId = (
+        await studentForCode(text(code, "Invitation code", 64).toUpperCase())
+      ).studentId;
+    else await requireStaff();
+    const rows = await listTickets(studentId);
     return NextResponse.json({
       tickets: rows.map((r) => ({
-        id: r.ticket.id,
-        category: r.ticket.category,
-        description: r.ticket.description,
-        status: r.ticket.status,
-        createdAt: r.ticket.createdAt,
-        resolvedAt: r.ticket.resolvedAt,
+        ...r.ticket,
         student: { studentId: r.student.studentId, name: r.student.name },
       })),
     });
-  } catch {
-    return NextResponse.json({ error: "Lookup failed" }, { status: 500 });
+  } catch (e) {
+    return fail(e);
   }
 }
-
-/** POST /api/tickets — student files a support ticket by roll ID. */
-export async function POST(request: NextRequest) {
-  let body: Record<string, unknown>;
+export async function POST(request: Request) {
   try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
-  }
-
-  const studentId = typeof body.studentId === "string" ? body.studentId.trim() : "";
-  const description =
-    typeof body.description === "string" ? body.description.trim() : "";
-  if (!studentId || !description) {
-    return NextResponse.json(
-      { error: "studentId and description are required" },
-      { status: 400 },
+    sameOrigin(request);
+    const b = await body(request);
+    if (!b.code)
+      throw new HttpError(
+        "Open your invitation before sending a request.",
+        401,
+      );
+    const student = await studentForCode(
+      text(b.code, "Invitation code", 64).toUpperCase(),
     );
-  }
-
-  try {
     const result = await createTicket({
-      studentId,
-      category: typeof body.category === "string" ? body.category.trim() : undefined,
-      description,
+      studentId: student.studentId,
+      category: text(b.category, "Category", 100, false) || "Other",
+      description: text(b.description, "Request", 2000),
     });
     return NextResponse.json({ ticket: result.ticket }, { status: 201 });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Creation failed";
-    const status = message === "Student not found" ? 404 : 500;
-    return NextResponse.json({ error: message }, { status });
+  } catch (e) {
+    return fail(e);
   }
 }
-
+export async function PATCH(request: Request) {
+  try {
+    sameOrigin(request);
+    await requireStaff();
+    const b = await body(request);
+    const status = text(b.status, "Status", 30);
+    if (!["pending", "in_progress", "resolved"].includes(status))
+      throw new HttpError("Choose a valid ticket status.");
+    const [ticket] = await getDb()
+      .update(supportTickets)
+      .set({ status, resolvedAt: status === "resolved" ? new Date() : null })
+      .where(eq(supportTickets.id, uuid(b.id)))
+      .returning();
+    if (!ticket) throw new HttpError("Ticket not found.", 404);
+    return NextResponse.json({ ticket });
+  } catch (e) {
+    return fail(e);
+  }
+}

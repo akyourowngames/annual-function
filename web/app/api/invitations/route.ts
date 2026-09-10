@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { requireStaff } from "@/lib/server/auth";
+import { fail, sameOrigin, integer } from "@/lib/server/http";
 import {
   countCheckIns,
   createStudentWithInvitation,
   getGuestUsage,
   listGuests,
 } from "@/lib/db/queries";
-
 /** GET /api/invitations?code=ANL-XXXXX — invitation status + guest usage. */
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code")?.trim().toUpperCase();
@@ -35,17 +36,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: message }, { status });
   }
 }
-
 /** POST /api/invitations — admin: create student + invitation. */
 export async function POST(request: NextRequest) {
+  try {
+    sameOrigin(request);
+    await requireStaff(true);
+  } catch (e) {
+    return fail(e);
+  }
   let body: Record<string, unknown>;
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
   }
-
-  const studentId = typeof body.studentId === "string" ? body.studentId.trim() : "";
+  const studentId =
+    typeof body.studentId === "string" ? body.studentId.trim() : "";
   const name = typeof body.name === "string" ? body.name.trim() : "";
   if (!studentId || !name) {
     return NextResponse.json(
@@ -57,12 +63,26 @@ export async function POST(request: NextRequest) {
     typeof body.guestLimit === "number" && Number.isInteger(body.guestLimit)
       ? body.guestLimit
       : undefined;
-
+  try {
+    if (body.guestLimit !== undefined) integer(body.guestLimit, "Guest limit");
+  } catch (e) {
+    return fail(e);
+  }
+  if (
+    studentId.length > 100 ||
+    name.length > 100 ||
+    (typeof body.className === "string" && body.className.length > 100)
+  )
+    return NextResponse.json(
+      { error: "Student details must be 100 characters or fewer." },
+      { status: 400 },
+    );
   try {
     const result = await createStudentWithInvitation({
       studentId,
       name,
-      className: typeof body.className === "string" ? body.className : undefined,
+      className:
+        typeof body.className === "string" ? body.className : undefined,
       guestLimit,
     });
     return NextResponse.json(
@@ -87,4 +107,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

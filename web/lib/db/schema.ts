@@ -3,12 +3,12 @@ import {
   check,
   date,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-
 /**
  * Database diagram (v1):
  *
@@ -37,7 +37,6 @@ import {
  *   (see ./queries.ts), never trusted to the AI
  * - QR carries only the opaque qr_token, never personal data
  */
-
 export const students = pgTable("students", {
   id: uuid("id").defaultRandom().primaryKey(),
   // School roll / student ID, e.g. "10234". Unique by rule.
@@ -48,7 +47,6 @@ export const students = pgTable("students", {
   email: text("email"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
-
 export const invitations = pgTable(
   "invitations",
   {
@@ -70,7 +68,6 @@ export const invitations = pgTable(
     check("invitations_guest_limit_non_negative", sql`${t.guestLimit} >= 0`),
   ],
 );
-
 export const guests = pgTable("guests", {
   id: uuid("id").defaultRandom().primaryKey(),
   invitationId: uuid("invitation_id")
@@ -81,7 +78,6 @@ export const guests = pgTable("guests", {
   status: text("status").notNull().default("registered"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
-
 export const checkIns = pgTable("check_ins", {
   id: uuid("id").defaultRandom().primaryKey(),
   invitationId: uuid("invitation_id")
@@ -92,7 +88,6 @@ export const checkIns = pgTable("check_ins", {
   checkedInAt: timestamp("checked_in_at").defaultNow().notNull(),
   checkedInBy: text("checked_in_by"),
 });
-
 export const supportTickets = pgTable("support_tickets", {
   id: uuid("id").defaultRandom().primaryKey(),
   studentId: uuid("student_id").references(() => students.id),
@@ -102,8 +97,9 @@ export const supportTickets = pgTable("support_tickets", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   resolvedAt: timestamp("resolved_at"),
 });
-
 export const eventSettings = pgTable("event_settings", {
+  landingContent:
+    jsonb("landing_content").$type<import("@/lib/landing").LandingContent>(),
   id: uuid("id").defaultRandom().primaryKey(),
   eventName: text("event_name").notNull(),
   eventDate: date("event_date"),
@@ -114,8 +110,13 @@ export const eventSettings = pgTable("event_settings", {
   entryInfo: text("entry_info"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
-
 export type Student = typeof students.$inferSelect;
+export const eventDocuments = pgTable("event_documents", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 export type NewStudent = typeof students.$inferInsert;
 export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;

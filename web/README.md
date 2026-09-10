@@ -1,4 +1,10 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Annual Function
+
+Public celebration page: `/`. Family invitations: `/portal`. Staff workspace: `/admin`.
+
+See [running the product](../docs/running-the-product.md) for configuration, database updates, staff access, editing the demo landing page, and verification commands.
+
+This is a [Next.js](https://nextjs.org) application.
 
 ## Getting Started
 

@@ -1,32 +1,51 @@
 import { NextResponse } from "next/server";
-
-/**
- * Health for the Next.js backend + reachability of the Python agent.
- * The agent is a dependency, never a authority: it may REQUEST actions,
- * this backend + the DB validate everything.
- */
+import { answerQuestion } from "@/lib/server/helpdesk";
+import { body, fail, HttpError, sameOrigin, text } from "@/lib/server/http";
+const requests = new Map<string, { count: number; until: number }>();
 export async function GET() {
-  const agentUrl = process.env.AGENT_URL ?? "http://127.0.0.1:8000";
-  let agent: { status: string; detail?: string };
-  try {
-    const res = await fetch(`${agentUrl}/health`, {
-      signal: AbortSignal.timeout(3000),
-      cache: "no-store",
-    });
-    agent = res.ok
-      ? { status: "reachable", detail: await res.text() }
-      : { status: "unhealthy", detail: `HTTP ${res.status}` };
-  } catch (err) {
-    agent = {
-      status: "unreachable",
-      detail: err instanceof Error ? err.message : "unknown error",
-    };
-  }
   return NextResponse.json({
     ok: true,
-    route: "agent",
-    agentUrl,
-    agent,
+    mode: process.env.OPENAI_API_KEY ? "ai" : "official_information",
   });
 }
-
+export async function POST(request: Request) {
+  try {
+    sameOrigin(request);
+    const b = await body(request);
+    const message = text(b.message, "Question", 2000);
+    const key =
+      request.headers.get("x-forwarded-for")?.split(",")[0] || "local";
+    const now = Date.now();
+    if (requests.size > 10000)
+      for (const [k, v] of requests) if (v.until < now) requests.delete(k);
+    const usage = requests.get(key);
+    if (usage && usage.until > now && usage.count >= 30)
+      throw new HttpError(
+        "You’ve sent several questions. Please try again in a few minutes, or use Support.",
+        429,
+      );
+    requests.set(key, {
+      count: usage && usage.until > now ? usage.count + 1 : 1,
+      until: usage && usage.until > now ? usage.until : now + 600000,
+    });
+    const code =
+      text(b.code, "Invitation code", 64, false).toUpperCase() || undefined;
+    const history = Array.isArray(b.history)
+      ? b.history
+          .slice(-8)
+          .filter(
+            (h) =>
+              h &&
+              ["user", "assistant"].includes(h.role) &&
+              typeof h.content === "string",
+          )
+          .map((h) => ({
+            role: h.role as string,
+            content: h.content.slice(0, 2000),
+          }))
+      : [];
+    return NextResponse.json(await answerQuestion(message, code, history));
+  } catch (e) {
+    return fail(e);
+  }
+}

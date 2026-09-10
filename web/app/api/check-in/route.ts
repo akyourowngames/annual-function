@@ -1,49 +1,57 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { checkInByQrToken, countCheckIns, getInvitationByQrToken } from "@/lib/db/queries";
-
-/** GET /api/check-in?qrToken=... — lookup what a scanned QR points to. */
+import {
+  checkInByQrToken,
+  countCheckIns,
+  getInvitationByQrToken,
+  listGuests,
+  studentForCode,
+} from "@/lib/db/queries";
+import { requireStaff } from "@/lib/server/auth";
+import {
+  body,
+  fail,
+  HttpError,
+  sameOrigin,
+  text,
+  uuid,
+} from "@/lib/server/http";
 export async function GET(request: NextRequest) {
-  const qrToken = request.nextUrl.searchParams.get("qrToken")?.trim();
-  if (!qrToken) {
-    return NextResponse.json({ error: "qrToken is required" }, { status: 400 });
-  }
   try {
-    const invitation = await getInvitationByQrToken(qrToken);
-    if (!invitation) {
-      return NextResponse.json({ error: "Invalid QR token" }, { status: 404 });
-    }
-    const checkInCount = await countCheckIns(invitation.id);
+    await requireStaff();
+    const token = text(
+      request.nextUrl.searchParams.get("qrToken"),
+      "QR token",
+      100,
+    );
+    const invitation = await getInvitationByQrToken(token);
+    if (!invitation) throw new HttpError("Invalid QR token", 404);
+    const [checkIns, guests, student] = await Promise.all([
+      countCheckIns(invitation.id),
+      listGuests(invitation.id),
+      studentForCode(invitation.invitationCode),
+    ]);
     return NextResponse.json({
-      valid: true,
+      valid: invitation.status === "active",
       invitationCode: invitation.invitationCode,
       status: invitation.status,
       guestLimit: invitation.guestLimit,
-      checkIns: checkInCount,
+      checkIns,
+      guests,
+      studentName: student.name,
     });
-  } catch {
-    return NextResponse.json({ error: "Lookup failed" }, { status: 500 });
+  } catch (e) {
+    return fail(e);
   }
 }
-
-/** POST /api/check-in — record a gate check-in by QR token. */
-export async function POST(request: NextRequest) {
-  let body: Record<string, unknown>;
+export async function POST(request: Request) {
   try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
-  }
-
-  const qrToken = typeof body.qrToken === "string" ? body.qrToken.trim() : "";
-  if (!qrToken) {
-    return NextResponse.json({ error: "qrToken is required" }, { status: 400 });
-  }
-
-  try {
+    sameOrigin(request);
+    const staff = await requireStaff();
+    const b = await body(request);
     const result = await checkInByQrToken({
-      qrToken,
-      guestId: typeof body.guestId === "string" ? body.guestId : undefined,
-      checkedInBy: typeof body.checkedInBy === "string" ? body.checkedInBy : undefined,
+      qrToken: text(b.qrToken, "QR token", 100),
+      guestId: b.guestId ? uuid(b.guestId) : undefined,
+      checkedInBy: staff.id,
     });
     return NextResponse.json(
       {
@@ -54,15 +62,7 @@ export async function POST(request: NextRequest) {
       },
       { status: 201 },
     );
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Check-in failed";
-    const status =
-      message === "Invalid QR token"
-        ? 404
-        : message === "Guest does not belong to this invitation"
-          ? 409
-          : 500;
-    return NextResponse.json({ error: message }, { status });
+  } catch (e) {
+    return fail(e);
   }
 }
-

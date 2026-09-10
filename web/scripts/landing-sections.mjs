@@ -1,0 +1,3 @@
+import {chromium} from '@playwright/test';
+const browser=await chromium.launch({channel:'msedge',headless:true});
+try{const page=await browser.newPage({viewport:{width:1440,height:1000}});await page.goto('http://127.0.0.1:3100',{waitUntil:'networkidle'});for(const id of ['the-evening','our-guests','programme','good-to-know','questions']){await page.locator('#'+id).scrollIntoViewIfNeeded();await page.waitForTimeout(900);await page.screenshot({path:`artifacts/landing-${id}.png`});}await page.locator('.invitation-section').scrollIntoViewIfNeeded();await page.waitForTimeout(900);await page.screenshot({path:'artifacts/landing-invitation.png'});}finally{await browser.close();}
