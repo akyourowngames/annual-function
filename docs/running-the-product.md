@@ -32,6 +32,8 @@ Until edited, the page uses Oakfield Public School and an explicitly labelled de
 
 The landing page includes scroll reveals, a three-star hunt, confetti, optional sounds, a calendar download, programme and FAQ accordions, and a mobile invitation dock. Sounds start off. Reduced-motion preferences disable movement while retaining content and actions.
 
+Student and staff screens share the same palette and display font. Shared Tailwind colour tokens live in `web/app/globals.css`; workspace cards, login layout, navigation, ticket treatment, and motion live in `web/app/workspace.css`. The header's star button triggers a small celebration. Navigation changes use a brief entrance, while data updates keep operational controls steady. Theatre images are served directly to avoid relying on Vercel's paid image optimizer.
+
 ## Invitations and helpdesk
 
 Families use the private invitation code supplied by the school. A roll number alone does not unlock tickets or invitations. Each guest is registered against the invitation's allowance; school staff control changes to that allowance. The pass offers a QR image download and the browser's Print / Save as PDF flow.

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/ui/AppShell";
 import Icon from "@/components/ui/Icon";
+import { Star } from "@/components/landing/Playground";
 import StaffLogin from "@/components/admin/StaffLogin";
 import Scanner from "@/components/admin/Scanner";
 import EventEditor from "@/components/admin/EventEditor";
@@ -85,11 +86,13 @@ export default function AdminHome() {
   useEffect(() => {
     if (!authenticated) return;
     let alive = true;
-    api<Dashboard>("/api/admin").then((result) => {
-      if (alive) setData(result);
-    }).catch((e) => {
-      if (alive) setError(e.message);
-    });
+    api<Dashboard>("/api/admin")
+      .then((result) => {
+        if (alive) setData(result);
+      })
+      .catch((e) => {
+        if (alive) setError(e.message);
+      });
     return () => {
       alive = false;
     };
@@ -317,6 +320,21 @@ export default function AdminHome() {
         <>
           {view === "overview" && (
             <>
+              <div className="backstage-banner">
+                <div>
+                  <Star className="paper-star" size={29} />
+                  <div>
+                    <strong>You make the magic happen.</strong>
+                    <p>
+                      A little planning here. A whole lot of happy memories out
+                      there.
+                    </p>
+                  </div>
+                </div>
+                <span className="backstage-stamp">
+                  with a little extra heart.
+                </span>
+              </div>
               <div className="stats-grid">
                 {[
                   {

@@ -279,7 +279,7 @@ export default function LandingEditor() {
             </div>
           </div>
         ))}
-        <label className="flex items-center gap-3 text-xs text-zinc-400 my-6">
+        <label className="flex items-center gap-3 text-xs text-muted my-6">
           <input
             type="checkbox"
             checked={content.isDemo}

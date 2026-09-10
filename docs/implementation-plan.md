@@ -4,7 +4,7 @@ The existing requirements in `../README.md` and `../annual_function_stack.md` de
 
 ## Design
 
-The portal follows the user's approved reference: Tailwind, black and zinc surfaces, a persistent sidebar, restrained borders, spacious content, and a printable invitation. The public landing page follows the later priority: playful paper theatre on a dark ink background, butter yellow, lilac, peach and mint, Bricolage display typography, reveal animations, collectible stars, optional sounds, and mobile swiping. Demo school, chief guests, and programme are editable in the staff workspace.
+The public landing page, student portal, staff login, and admin workspace share a playful paper-theatre identity: dark ink, butter yellow, lilac, peach and mint, Bricolage display typography, and Geist body text. The workspaces use pastel overview cards, paper-like forms, star navigation, a lilac printable invitation, a short entrance on view changes, and a user-triggered celebration. Reduced-motion preferences disable movement. Demo school, chief guests, and programme are editable in the staff workspace.
 
 ## Delivery sequence
 

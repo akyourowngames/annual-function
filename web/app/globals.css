@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 :root {
-  --background: #050505;
-  --foreground: #f4f4f5;
-  --panel: #0b0b0d;
-  --line: rgba(255, 255, 255, 0.08);
-  --muted: #a1a1aa;
-  --accent: #fafafa;
+  --background: #0b0b14;
+  --foreground: #f5f1e8;
+  --panel: #171422;
+  --line: #c5b4ed26;
+  --muted: #b0a7bf;
+  --accent: #f1e594;
   color-scheme: dark;
 }
 @theme inline {
@@ -14,6 +14,17 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-ink: #0b0b14;
+  --color-ink-soft: #11101b;
+  --color-ink-raised: #171422;
+  --color-ink-line: #332b43;
+  --color-paper: #f5f1e8;
+  --color-muted: #b0a7bf;
+  --color-dim: #958ba5;
+  --color-lilac: #c5b4ed;
+  --color-butter: #f1e594;
+  --color-peach: #eab198;
+  --color-mint: #b7d6bb;
 }
 
 @layer base {
@@ -21,7 +32,7 @@
     box-sizing: border-box;
   }
   body {
-    @apply m-0 bg-[#050505] text-zinc-100 antialiased;
+    @apply m-0 bg-ink text-paper antialiased;
     font-family: var(--font-geist-sans), Arial, sans-serif;
     font-size: 14px;
     line-height: 1.6;
@@ -49,7 +60,7 @@
   }
   button:focus-visible,
   a:focus-visible {
-    outline: 2px solid #93c5fd;
+    outline: 2px solid var(--accent);
     outline-offset: 4px;
   }
   h1,
@@ -57,6 +68,11 @@
   h3,
   p {
     margin: 0;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-play), var(--font-geist-sans), sans-serif;
   }
   h1 {
     @apply text-[28px] font-semibold leading-tight tracking-[-1.1px] sm:text-[32px];
@@ -68,18 +84,18 @@
     @apply text-sm font-medium;
   }
   ::selection {
-    background: white;
-    color: black;
+    background: #c5b4ed;
+    color: #211b2c;
   }
   ::-webkit-scrollbar {
     width: 5px;
     height: 5px;
   }
   ::-webkit-scrollbar-track {
-    background: #080808;
+    background: #11101b;
   }
   ::-webkit-scrollbar-thumb {
-    background: #27272a;
+    background: #4a3d5f;
     border-radius: 8px;
   }
 }
@@ -92,13 +108,13 @@
     @apply mb-8 flex items-center justify-between gap-4;
   }
   .page-heading p {
-    @apply mt-2 text-xs leading-relaxed text-zinc-500;
+    @apply mt-2 text-xs leading-relaxed text-muted;
   }
   .date-chip {
-    @apply hidden items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-[10px] text-zinc-400 sm:flex;
+    @apply hidden items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-[10px] text-muted sm:flex;
   }
   .panel {
-    @apply rounded-2xl border border-white/[0.08] bg-[#0b0b0d] p-6 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.025)] transition-colors duration-300;
+    @apply rounded-2xl border border-white/[0.08] bg-ink-raised p-6 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.025)] transition-colors duration-300;
   }
   .panel + .panel {
     margin-top: 20px;
@@ -110,18 +126,18 @@
     @apply mb-5 flex items-center justify-between gap-4;
   }
   .section-heading p {
-    @apply mt-1 text-[11px] text-zinc-500;
+    @apply mt-1 text-[11px] text-muted;
   }
   .muted,
   .caption {
-    @apply text-[11px] leading-relaxed text-zinc-500;
+    @apply text-[11px] leading-relaxed text-muted;
   }
   .button {
-    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2.5 text-[11px] font-medium text-zinc-200 transition duration-200 hover:border-white/20 hover:bg-white/[0.07] active:scale-[0.98];
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2.5 text-[11px] font-medium text-paper transition duration-200 hover:border-white/20 hover:bg-white/[0.07] active:scale-[0.98];
   }
   .button.primary,
   .button.light {
-    @apply border-white bg-white font-semibold text-black hover:border-zinc-200 hover:bg-zinc-200;
+    @apply border-white bg-white font-semibold text-black hover:border-butter hover:bg-lilac;
   }
   .button.small {
     @apply min-h-8 px-3 py-1.5 text-[10px];
@@ -142,23 +158,23 @@
     @apply justify-end;
   }
   .icon-button {
-    @apply inline-flex items-center justify-center rounded-lg border-0 bg-transparent p-2 text-zinc-500 transition hover:bg-white/5 hover:text-white;
+    @apply inline-flex items-center justify-center rounded-lg border-0 bg-transparent p-2 text-muted transition hover:bg-white/5 hover:text-white;
   }
   .text-button {
-    @apply inline-flex items-center gap-2 border-0 bg-transparent p-0 text-[11px] font-medium text-zinc-400 transition hover:text-white;
+    @apply inline-flex items-center gap-2 border-0 bg-transparent p-0 text-[11px] font-medium text-muted transition hover:text-white;
   }
   .field {
     @apply mb-5 block;
   }
   .field > span,
   .field > label {
-    @apply mb-2 block text-[11px] font-medium text-zinc-400;
+    @apply mb-2 block text-[11px] font-medium text-muted;
   }
   .field input,
   .field select,
   .field textarea,
   .search-input {
-    @apply block min-h-[43px] w-full rounded-lg border border-white/10 bg-[#070707] px-3.5 py-3 text-xs text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-zinc-500 focus:ring-2 focus:ring-white/5;
+    @apply block min-h-[43px] w-full rounded-lg border border-white/10 bg-ink-soft px-3.5 py-3 text-xs text-paper outline-none transition placeholder:text-dim focus:border-lilac focus:ring-2 focus:ring-white/5;
   }
   .field textarea {
     @apply min-h-[115px] resize-y leading-relaxed;
@@ -186,53 +202,53 @@
     @apply mb-6 flex items-center justify-between gap-3;
   }
   .invitation-top > span:first-child {
-    @apply flex items-center gap-2 text-[10px] text-zinc-500;
+    @apply flex items-center gap-2 text-[10px] text-muted;
   }
   .invitation-panel h3 {
     @apply text-[25px] font-semibold leading-tight tracking-[-.8px];
   }
   .invitation-panel > p {
-    @apply mb-6 mt-3 max-w-[340px] text-xs leading-[1.8] text-zinc-500;
+    @apply mb-6 mt-3 max-w-[340px] text-xs leading-[1.8] text-muted;
   }
   .invitation-panel .security-note {
     @apply mb-0 mt-5 text-[9px];
   }
   .badge {
-    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-white/10 bg-white/[0.035] px-2 py-1 text-[9px] font-medium text-zinc-400;
+    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-white/10 bg-white/[0.035] px-2 py-1 text-[9px] font-medium text-muted;
   }
   .badge.success {
-    @apply border-emerald-500/20 bg-emerald-500/[0.07] text-emerald-400;
+    @apply border-mint/20 bg-mint/[0.07] text-mint;
   }
   .badge.warning {
-    @apply border-amber-400/20 bg-amber-400/[0.07] text-amber-300;
+    @apply border-butter/20 bg-butter/[0.07] text-butter;
   }
   .badge.purple {
-    @apply border-blue-400/15 bg-blue-400/[0.06] text-blue-300;
+    @apply border-lilac/15 bg-lilac/[0.06] text-lilac;
   }
   .security-note {
-    @apply mt-4 flex items-center gap-2 text-[10px] leading-relaxed text-zinc-500;
+    @apply mt-4 flex items-center gap-2 text-[10px] leading-relaxed text-muted;
   }
   .notice {
-    @apply my-4 rounded-xl border border-blue-400/20 bg-blue-400/[0.06] px-4 py-3 text-xs leading-relaxed text-blue-200;
+    @apply my-4 rounded-xl border border-lilac/20 bg-lilac/[0.06] px-4 py-3 text-xs leading-relaxed text-lilac;
     overflow-wrap: anywhere;
   }
   .notice.error {
     @apply border-red-400/20 bg-red-400/[0.06] text-red-300;
   }
   .notice.success {
-    @apply border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-300;
+    @apply border-mint/20 bg-mint/[0.06] text-mint;
   }
   .empty-state {
     @apply px-5 py-10 text-center;
   }
   .empty-state > svg {
-    @apply mx-auto mb-4 text-zinc-600;
+    @apply mx-auto mb-4 text-dim;
   }
   .empty-state h3 {
-    @apply mb-2 text-sm text-zinc-300;
+    @apply mb-2 text-sm text-paper/90;
   }
   .empty-state p {
-    @apply mx-auto mb-5 max-w-[340px] text-xs leading-relaxed text-zinc-500;
+    @apply mx-auto mb-5 max-w-[340px] text-xs leading-relaxed text-muted;
   }
   .stats-grid {
     @apply mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4;
@@ -241,22 +257,22 @@
     @apply grid-cols-3;
   }
   .stat {
-    @apply rounded-xl border border-white/[0.07] bg-[#0b0b0d] p-5;
+    @apply rounded-xl border border-white/[0.07] bg-ink-raised p-5;
   }
   .stat-top {
-    @apply flex items-center justify-between gap-2 text-[10px] text-zinc-500;
+    @apply flex items-center justify-between gap-2 text-[10px] text-muted;
   }
   .stat-top svg {
-    @apply text-zinc-500;
+    @apply text-muted;
   }
   .stat strong {
-    @apply mb-1 mt-5 block font-mono text-[30px] font-semibold leading-none tracking-tight text-zinc-100;
+    @apply mb-1 mt-5 block font-mono text-[30px] font-semibold leading-none tracking-tight text-paper;
   }
   .stat small {
-    @apply text-[9px] text-zinc-500;
+    @apply text-[9px] text-muted;
   }
   .avatar {
-    @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-zinc-900 text-[10px] font-medium text-zinc-400;
+    @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-ink-raised text-[10px] font-medium text-muted;
   }
   .guest-list {
     @apply m-0 list-none p-0;
@@ -265,19 +281,19 @@
     @apply flex items-center gap-3 border-b border-white/[0.06] py-4 last:border-0;
   }
   .guest-list strong {
-    @apply block text-xs font-medium text-zinc-200;
+    @apply block text-xs font-medium text-paper;
   }
   .guest-list small {
-    @apply text-[10px] text-zinc-500;
+    @apply text-[10px] text-muted;
   }
   .guest-list .badge {
     @apply ml-auto;
   }
   .progress-track {
-    @apply mb-3 mt-4 h-1 overflow-hidden rounded-full bg-zinc-800;
+    @apply mb-3 mt-4 h-1 overflow-hidden rounded-full bg-ink-line;
   }
   .progress-track > span {
-    @apply block h-full rounded-full bg-zinc-200;
+    @apply block h-full rounded-full bg-lilac;
   }
   .info-list {
     @apply m-0 list-none p-0;
@@ -286,13 +302,13 @@
     @apply flex gap-3 border-b border-white/[0.06] py-4 last:border-0;
   }
   .info-list li > svg {
-    @apply mt-0.5 shrink-0 text-zinc-500;
+    @apply mt-0.5 shrink-0 text-muted;
   }
   .info-list strong {
-    @apply block text-xs font-medium text-zinc-300;
+    @apply block text-xs font-medium text-paper/90;
   }
   .info-list p {
-    @apply mt-1.5 text-[11px] leading-relaxed text-zinc-500;
+    @apply mt-1.5 text-[11px] leading-relaxed text-muted;
   }
   .event-detail-grid {
     @apply grid gap-4 sm:grid-cols-2 xl:grid-cols-3;
@@ -301,13 +317,13 @@
     @apply m-0 min-h-[180px];
   }
   .event-detail-grid .panel > svg {
-    @apply mb-6 text-zinc-500;
+    @apply mb-6 text-muted;
   }
   .event-detail-grid h3 {
     @apply mb-2;
   }
   .event-detail-grid p {
-    @apply whitespace-pre-wrap text-xs leading-relaxed text-zinc-500;
+    @apply whitespace-pre-wrap text-xs leading-relaxed text-muted;
   }
   .ticket-list {
     @apply mt-5 grid gap-3;
@@ -319,11 +335,11 @@
     @apply mb-3 flex items-center justify-between gap-3 text-xs;
   }
   .support-ticket p {
-    @apply whitespace-pre-wrap text-xs leading-relaxed text-zinc-400;
+    @apply whitespace-pre-wrap text-xs leading-relaxed text-muted;
     overflow-wrap: anywhere;
   }
   .support-ticket footer {
-    @apply mt-4 flex flex-wrap items-center justify-between gap-3 text-[10px] text-zinc-500;
+    @apply mt-4 flex flex-wrap items-center justify-between gap-3 text-[10px] text-muted;
   }
   .chat-panel {
     @apply flex min-h-[560px] flex-col;
@@ -332,26 +348,26 @@
     @apply flex max-h-[520px] flex-1 flex-col gap-5 overflow-auto py-4;
   }
   .chat-message {
-    @apply max-w-[90%] whitespace-pre-wrap rounded-2xl rounded-tl-sm border border-white/[0.07] bg-white/[0.025] px-5 py-4 text-xs leading-[1.9] text-zinc-300;
+    @apply max-w-[90%] whitespace-pre-wrap rounded-2xl rounded-tl-sm border border-white/[0.07] bg-white/[0.025] px-5 py-4 text-xs leading-[1.9] text-paper/90;
     overflow-wrap: anywhere;
   }
   .chat-message.user {
-    @apply ml-auto rounded-tl-2xl rounded-tr-sm border-white/10 bg-zinc-900;
+    @apply ml-auto rounded-tl-2xl rounded-tr-sm border-white/10 bg-ink-raised;
   }
   .chat-message small {
-    @apply mb-1.5 block text-[9px] text-zinc-500;
+    @apply mb-1.5 block text-[9px] text-muted;
   }
   .suggestions {
     @apply my-4 flex flex-wrap gap-2;
   }
   .suggestions button {
-    @apply rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2 text-[10px] text-zinc-500 transition hover:border-white/20 hover:text-zinc-200;
+    @apply rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2 text-[10px] text-muted transition hover:border-white/20 hover:text-paper;
   }
   .table-tools {
     @apply mb-5 flex flex-wrap items-center justify-between gap-3;
   }
   .search-box {
-    @apply flex max-w-[340px] flex-1 items-center gap-2.5 text-zinc-500;
+    @apply flex max-w-[340px] flex-1 items-center gap-2.5 text-muted;
   }
   .search-input {
     @apply min-w-0;
@@ -363,16 +379,16 @@
     @apply w-full border-collapse text-left text-[11px];
   }
   .data-table th {
-    @apply whitespace-nowrap border-b border-white/[0.08] px-3 py-3 text-[10px] font-medium text-zinc-500;
+    @apply whitespace-nowrap border-b border-white/[0.08] px-3 py-3 text-[10px] font-medium text-muted;
   }
   .data-table td {
-    @apply border-b border-white/[0.05] px-3 py-4 text-zinc-400;
+    @apply border-b border-white/[0.05] px-3 py-4 text-muted;
   }
   .data-table td strong {
-    @apply block font-medium text-zinc-200;
+    @apply block font-medium text-paper;
   }
   .data-table td small {
-    @apply text-[10px] text-zinc-500;
+    @apply text-[10px] text-muted;
   }
   .data-table tr:last-child td {
     @apply border-0;
@@ -381,7 +397,7 @@
     @apply transition hover:bg-white/[0.02];
   }
   .auth-page {
-    @apply flex min-h-dvh items-center justify-center bg-[#050505] p-6;
+    @apply flex min-h-dvh items-center justify-center bg-ink p-6;
     background-image: radial-gradient(
       ellipse at 50% 0%,
       #12213b66,
@@ -389,19 +405,19 @@
     );
   }
   .auth-card {
-    @apply w-full max-w-[430px] rounded-2xl border border-white/10 bg-[#0a0a0a] p-8 shadow-2xl;
+    @apply w-full max-w-[430px] rounded-2xl border border-white/10 bg-ink-raised p-8 shadow-2xl;
   }
   .brand {
     @apply mb-9 flex items-center justify-center gap-2 text-[26px] font-semibold tracking-[-1px];
   }
   .brand-dot {
-    @apply text-zinc-500;
+    @apply text-muted;
   }
   .auth-card h1 {
     @apply mb-2 text-[26px];
   }
   .auth-card > p {
-    @apply mb-6 text-xs text-zinc-500;
+    @apply mb-6 text-xs text-muted;
   }
   .auth-tabs {
     @apply my-6 flex gap-2 rounded-xl border border-white/[0.06] bg-black p-1;
@@ -410,34 +426,34 @@
     @apply flex-1 border-0;
   }
   .staff-link {
-    @apply mt-5 flex items-center justify-center gap-2 text-[11px] text-zinc-500 hover:text-white;
+    @apply mt-5 flex items-center justify-center gap-2 text-[11px] text-muted hover:text-white;
   }
   .scan-preview {
-    @apply mb-5 grid min-h-[220px] place-items-center rounded-xl border border-dashed border-white/15 bg-black text-zinc-400;
+    @apply mb-5 grid min-h-[220px] place-items-center rounded-xl border border-dashed border-white/15 bg-black text-muted;
   }
   .scan-video {
     @apply max-h-[300px] w-full rounded-xl object-cover;
   }
   .pass {
-    @apply overflow-hidden rounded-2xl border border-white/15 bg-[#0a0a0a];
+    @apply overflow-hidden rounded-2xl border border-white/15 bg-ink-raised;
   }
   .pass-header {
     @apply flex items-center justify-between gap-3 border-b border-white/[0.08] px-6 py-5;
   }
   .pass-header strong {
-    @apply text-xs font-medium text-zinc-300;
+    @apply text-xs font-medium text-paper/90;
   }
   .pass-body {
     @apply p-8 text-center;
   }
   .pass-body > svg {
-    @apply text-zinc-500;
+    @apply text-muted;
   }
   .pass-body h2 {
     @apply text-[30px] font-semibold tracking-[-1px];
   }
   .pass-body > p {
-    @apply mt-3 text-xs leading-relaxed text-zinc-500;
+    @apply mt-3 text-xs leading-relaxed text-muted;
   }
   .qr-frame {
     @apply mx-auto my-7 grid h-[200px] w-[200px] place-items-center rounded-xl bg-white p-3 text-xs text-zinc-800;
@@ -446,10 +462,10 @@
     @apply h-full w-full;
   }
   .pass-code {
-    @apply mt-4 block font-mono text-xs tracking-[1px] text-zinc-400;
+    @apply mt-4 block font-mono text-xs tracking-[1px] text-muted;
   }
   .pass-footer {
-    @apply border-t border-dashed border-white/20 p-5 text-center text-[11px] text-zinc-500;
+    @apply border-t border-dashed border-white/20 p-5 text-center text-[11px] text-muted;
   }
   .pass-actions {
     @apply mt-5;
@@ -458,7 +474,7 @@
     @apply mt-6;
   }
   .loading-line {
-    @apply py-6 text-xs text-zinc-500;
+    @apply py-6 text-xs text-muted;
   }
   .skip-link {
     @apply fixed -top-20 left-5 z-[100] rounded-b-lg bg-white p-3 text-black focus:top-0;
