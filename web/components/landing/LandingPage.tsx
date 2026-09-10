@@ -283,6 +283,7 @@ export default function LandingPage() {
               height={1254}
               alt="A handmade paper theatre with lilac curtains, a glowing crescent moon, and hanging golden stars"
               priority
+              unoptimized
               sizes="(max-width: 760px) 100vw, 55vw"
               className="theatre-art"
             />
