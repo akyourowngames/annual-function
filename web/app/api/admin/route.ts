@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { count, desc, eq, sql } from "drizzle-orm";
+import { count, desc, eq, sql, and, inArray } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
   checkIns,
@@ -100,6 +100,34 @@ export async function PATCH(request: Request) {
     sameOrigin(request);
     await requireStaff(true);
     const b = await body(request);
+    if (b.codes !== undefined) {
+      if (!Array.isArray(b.codes))
+        throw new HttpError("Select students to edit.");
+      if (b.guestLimit === undefined)
+        throw new HttpError("Choose a guest limit to apply.");
+      const limit = integer(b.guestLimit, "Guest limit");
+      const codes = b.codes.map((c) => text(c, "Invitation code", 64).toUpperCase());
+      if (!codes.length) throw new HttpError("Select at least one student.");
+      if (codes.length > 1000)
+        throw new HttpError("Too many students selected.");
+      const fits = sql`
+        (select count(*) from guests where invitation_id = ${invitations.id}) <= ${limit}
+        and (select count(*) from check_ins where invitation_id = ${invitations.id}) <= ${limit}`;
+      const updated = await getDb().transaction(async (tx) => {
+        // The per-invitation guard stays: limits can never drop below
+        // existing registrations or check-ins, even in bulk.
+        return tx
+          .update(invitations)
+          .set({ guestLimit: limit })
+          .where(and(inArray(invitations.invitationCode, codes), fits))
+          .returning({ code: invitations.invitationCode });
+      });
+      const updatedCodes = new Set(updated.map((u) => u.code));
+      const skipped = codes.filter((c) => !updatedCodes.has(c));
+      return NextResponse.json({
+        invitation: { updated: updated.length, skipped },
+      });
+    }
     const code = text(b.code, "Invitation code", 64).toUpperCase();
     const result = await getDb().transaction(async (tx) => {
       const [inv] = await tx

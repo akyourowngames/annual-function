@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AppShell from "@/components/ui/AppShell";
 import Icon from "@/components/ui/Icon";
 import { Star } from "@/components/landing/Playground";
@@ -55,6 +55,14 @@ const NAV = [
   { id: "tickets", label: "Support requests", icon: "help" },
   { id: "settings", label: "Event & knowledge", icon: "settings" },
 ];
+function matchesSearch(
+  i: { name: string; studentId: string; className: string | null; code: string },
+  search: string,
+) {
+  return `${i.name} ${i.studentId} ${i.className} ${i.code}`
+    .toLowerCase()
+    .includes(search.toLowerCase());
+}
 export default function AdminHome() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null),
     [data, setData] = useState<Dashboard | null>(null),
@@ -65,7 +73,27 @@ export default function AdminHome() {
     [search, setSearch] = useState(""),
     [create, setCreate] = useState(false),
     [edit, setEdit] = useState<Invitation | null>(null),
-    [ticketFilter, setTicketFilter] = useState("all");
+    [ticketFilter, setTicketFilter] = useState("all"),
+    [selected, setSelected] = useState<Set<string>>(new Set()),
+    [bulkLimit, setBulkLimit] = useState("4");
+  const editRef = useRef<HTMLDivElement>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  const checkedList = useCallback(
+    () => (data?.invitations || []).filter((i) => matchesSearch(i, search)),
+    [data, search],
+  );
+  useEffect(() => {
+    if (edit)
+      editRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [edit]);
+  useEffect(() => {
+    const box = selectAllRef.current;
+    if (!box) return;
+    const list = checkedList();
+    const checked = list.filter((i) => selected.has(i.code)).length;
+    box.checked = list.length > 0 && checked === list.length;
+    box.indeterminate = checked > 0 && checked < list.length;
+  }, [selected, checkedList]);
   const refresh = useCallback(async () => {
     const r = await api<Dashboard>("/api/admin");
     setData(r);
@@ -97,17 +125,17 @@ export default function AdminHome() {
       alive = false;
     };
   }, [authenticated, refresh]);
-  async function action(
+  async function action<T = unknown>(
     path: string,
     method: string,
     body: unknown,
     message: string,
-  ) {
+  ): Promise<T | null> {
     setBusy(true);
     setError("");
     setNotice("");
     try {
-      const r = await api(path, { method, body: JSON.stringify(body) });
+      const r = await api<T>(path, { method, body: JSON.stringify(body) });
       await refresh();
       setNotice(message);
       return r;
@@ -133,6 +161,45 @@ export default function AdminHome() {
       "Student invitation is ready. Share the private code with their family.",
     );
     if (r) setCreate(false);
+  }
+  function toggleAll() {
+    const list = checkedList();
+    const all = list.length > 0 && list.every((i) => selected.has(i.code));
+    const next = new Set(selected);
+    for (const i of list) {
+      if (all) next.delete(i.code);
+      else next.add(i.code);
+    }
+    setSelected(next);
+  }
+  function toggleOne(code: string) {
+    const next = new Set(selected);
+    if (next.has(code)) next.delete(code);
+    else next.add(code);
+    setSelected(next);
+  }
+  async function applyBulkLimit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const limit = Number(bulkLimit);
+    if (!selected.size || !Number.isInteger(limit) || limit < 0 || limit > 100)
+      return;
+    const r = await action<{
+      invitation: { updated: number; skipped: string[] };
+    }>("/api/admin", "PATCH", { codes: [...selected], guestLimit: limit }, "");
+    if (!r) return;
+    const { updated, skipped } = r.invitation;
+    setNotice(
+      skipped.length
+        ? `Guest limit set to ${limit} for ${updated} ${
+            updated === 1 ? "student" : "students"
+          }. Skipped ${skipped.length} with registered or checked-in guests above ${limit} (${skipped
+            .slice(0, 3)
+            .join(", ")}${skipped.length > 3 ? "…" : ""}).`
+        : `Guest limit set to ${limit} for ${updated} ${
+            updated === 1 ? "student" : "students"
+          }.`,
+    );
+    setSelected(new Set());
   }
   function exportCsv() {
     if (!data) return;
@@ -187,17 +254,23 @@ export default function AdminHome() {
   if (!authenticated)
     return <StaffLogin onLogin={() => setAuthenticated(true)} />;
   const isAdmin = data?.staff.role === "admin";
-  const filtered =
-    data?.invitations.filter((i) =>
-      `${i.name} ${i.studentId} ${i.className} ${i.code}`
-        .toLowerCase()
-        .includes(search.toLowerCase()),
-    ) || [];
+  const canSelect = view === "invitations" && isAdmin;
+  const filtered = data?.invitations.filter((i) => matchesSearch(i, search)) || [];
   const invitationTable = (
     <div className="table-wrap">
       <table className="data-table">
         <thead>
           <tr>
+            {canSelect && (
+              <th className="select-col">
+                <input
+                  ref={selectAllRef}
+                  type="checkbox"
+                  aria-label="Select all students in this list"
+                  onChange={toggleAll}
+                />
+              </th>
+            )}
             <th>Student</th>
             <th>Invitation</th>
             <th>Guests</th>
@@ -209,6 +282,16 @@ export default function AdminHome() {
         <tbody>
           {filtered.slice(0, view === "overview" ? 6 : undefined).map((i) => (
             <tr key={i.id}>
+              {canSelect && (
+                <td>
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${i.name}`}
+                    checked={selected.has(i.code)}
+                    onChange={() => toggleOne(i.code)}
+                  />
+                </td>
+              )}
               <td>
                 <strong>{i.name}</strong>
                 <small>
@@ -229,7 +312,13 @@ export default function AdminHome() {
               </td>
               {isAdmin && (
                 <td>
-                  <button className="button small" onClick={() => setEdit(i)}>
+                  <button
+                    className="button small"
+                    onClick={() => {
+                      setSelected(new Set());
+                      setEdit(i);
+                    }}
+                  >
                     Manage
                   </button>
                 </td>
@@ -540,88 +629,135 @@ export default function AdminHome() {
                   </form>
                 </section>
               )}
+              <div ref={editRef}>
+                {edit && (
+                  <section className="panel" style={{ marginBottom: 20 }}>
+                    <div className="section-heading">
+                      <h2>Manage {edit.name}’s invitation</h2>
+                      <button
+                        className="icon-button"
+                        aria-label="Close invitation editor"
+                        onClick={() => setEdit(null)}
+                      >
+                        <Icon name="close" />
+                      </button>
+                    </div>
+                    <form
+                      key={edit.code}
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        const f = new FormData(e.currentTarget);
+                        if (
+                          await action(
+                            "/api/admin",
+                            "PATCH",
+                            {
+                              code: edit.code,
+                              guestLimit: Number(f.get("guestLimit")),
+                              status: f.get("status"),
+                            },
+                            "Invitation updated.",
+                          )
+                        )
+                          setEdit(null);
+                      }}
+                    >
+                      <div className="form-grid">
+                        <label className="field">
+                          <span>Guest limit</span>
+                          <input
+                            type="number"
+                            name="guestLimit"
+                            defaultValue={edit.guestLimit}
+                            min={edit.registered}
+                            max={100}
+                            required
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Status</span>
+                          <select name="status" defaultValue={edit.status}>
+                            <option value="active">Active</option>
+                            <option value="disabled">Disabled</option>
+                          </select>
+                        </label>
+                      </div>
+                      <button className="button primary" disabled={busy}>
+                        Save changes
+                      </button>
+                    </form>
+                    <div className="space-top">
+                      <p className="caption">
+                        Replace a lost or shared pass. Its existing code and QR
+                        will stop working.
+                      </p>
+                      <button
+                        className="button danger small space-top"
+                        disabled={busy}
+                        onClick={async () => {
+                          if (
+                            await action(
+                              "/api/admin",
+                              "PATCH",
+                              { code: edit.code, regenerate: true },
+                              "New invitation generated. Share the new code from the invitation list.",
+                            )
+                          )
+                            setEdit(null);
+                        }}
+                      >
+                        Replace invitation code & QR
+                      </button>
+                    </div>
+                  </section>
+                )}
+                {canSelect && selected.size > 0 && (
+                  <section className="panel" style={{ marginBottom: 20 }}>
+                    <div className="section-heading">
+                      <h2>
+                        {selected.size}{" "}
+                        {selected.size === 1 ? "student" : "students"} selected
+                      </h2>
+                      <button
+                        className="text-button"
+                        onClick={() => setSelected(new Set())}
+                      >
+                        Clear selection
+                      </button>
+                    </div>
+                    <form onSubmit={applyBulkLimit} className="space-top">
+                      <div className="form-grid">
+                        <label className="field">
+                          <span>Guest limit for every selected student</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            required
+                            value={bulkLimit}
+                            onChange={(e) => setBulkLimit(e.target.value)}
+                          />
+                        </label>
+                        <div className="field" style={{ alignSelf: "end" }}>
+                          <button
+                            className="button primary"
+                            disabled={busy}
+                          >
+                            Apply to {selected.size}
+                          </button>
+                        </div>
+                      </div>
+                      <p className="caption space-top">
+                        Skips any selected student whose registered or
+                        checked-in guests already exceed the new limit. Editing
+                        guest limits never removes registered guests.
+                      </p>
+                    </form>
+                  </section>
+                )}
+              </div>
               <section className="panel">{invitationTable}</section>
             </>
-          )}
-          {edit && (
-            <section className="panel space-top">
-              <div className="section-heading">
-                <h2>Manage {edit.name}’s invitation</h2>
-                <button
-                  className="icon-button"
-                  aria-label="Close invitation editor"
-                  onClick={() => setEdit(null)}
-                >
-                  <Icon name="close" />
-                </button>
-              </div>
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const f = new FormData(e.currentTarget);
-                  if (
-                    await action(
-                      "/api/admin",
-                      "PATCH",
-                      {
-                        code: edit.code,
-                        guestLimit: Number(f.get("guestLimit")),
-                        status: f.get("status"),
-                      },
-                      "Invitation updated.",
-                    )
-                  )
-                    setEdit(null);
-                }}
-              >
-                <div className="form-grid">
-                  <label className="field">
-                    <span>Guest limit</span>
-                    <input
-                      type="number"
-                      name="guestLimit"
-                      defaultValue={edit.guestLimit}
-                      min={edit.registered}
-                      max={100}
-                      required
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Status</span>
-                    <select name="status" defaultValue={edit.status}>
-                      <option value="active">Active</option>
-                      <option value="disabled">Disabled</option>
-                    </select>
-                  </label>
-                </div>
-                <button className="button primary" disabled={busy}>
-                  Save changes
-                </button>
-              </form>
-              <div className="space-top">
-                <p className="caption">
-                  Replace a lost or shared pass. Its existing code and QR will
-                  stop working.
-                </p>
-                <button
-                  className="button danger small space-top"
-                  disabled={busy}
-                  onClick={async () => {
-                    if (
-                      await action(
-                        "/api/admin",
-                        "PATCH",
-                        { code: edit.code, regenerate: true },
-                        "New invitation generated. Share the new code from the invitation list.",
-                      )
-                    )
-                      setEdit(null);
-                  }}
-                >
-                  Replace invitation code & QR
-                </button>
-              </div>
-            </section>
           )}
           {view === "guests" && (
             <section className="panel">
