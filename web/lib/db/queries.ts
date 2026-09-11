@@ -9,6 +9,8 @@ import {
   type Guest,
 } from "./schema";
 import { newInvitationCode, newQrToken } from "@/lib/invitations/codes";
+import { identityMatches } from "@/lib/invitations/identity";
+import { HttpError } from "@/lib/server/http";
 /**
  * Backend-owned queries. The agent may REQUEST these actions, but the
  * database + this logic validate everything. The AI can never bypass
@@ -111,24 +113,21 @@ export async function createStudentWithInvitation(input: {
 }) {
   const db = getDb();
   return db.transaction(async (tx) => {
+    await tx.insert(students).values({
+      studentId: input.studentId,
+      name: input.name,
+      className: input.className,
+    }).onConflictDoNothing({ target: students.studentId });
     const foundStudent = await tx
       .select()
       .from(students)
       .where(eq(students.studentId, input.studentId))
-      .limit(1);
-    let student = foundStudent[0];
-    if (!student) {
-      const inserted = await tx
-        .insert(students)
-        .values({
-          studentId: input.studentId,
-          name: input.name,
-          className: input.className,
-        })
-        .returning();
-      student = inserted[0];
-      if (!student) throw new Error("Failed to create student");
-    }
+      .limit(1)
+      .for("update");
+    const student = foundStudent[0];
+    if (!student) throw new Error("Failed to create student");
+    if (!identityMatches(student, { admissionNumber: input.studentId, name: input.name, className: input.className || "" }))
+      throw new HttpError("This admission number already belongs to a student with different details. Check the name and class before continuing.", 409);
     const foundInv = await tx
       .select()
       .from(invitations)

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireStaff } from "@/lib/server/auth";
-import { fail, sameOrigin, integer } from "@/lib/server/http";
+import { body, fail, sameOrigin, integer, text, HttpError } from "@/lib/server/http";
 import {
   countCheckIns,
   createStudentWithInvitation,
@@ -44,50 +44,24 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     return fail(e);
   }
-  let body: Record<string, unknown>;
   try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
-  }
-  const studentId =
-    typeof body.studentId === "string" ? body.studentId.trim() : "";
-  const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (!studentId || !name) {
-    return NextResponse.json(
-      { error: "studentId and name are required" },
-      { status: 400 },
-    );
-  }
-  const guestLimit =
-    typeof body.guestLimit === "number" && Number.isInteger(body.guestLimit)
-      ? body.guestLimit
-      : undefined;
-  try {
-    if (body.guestLimit !== undefined) integer(body.guestLimit, "Guest limit");
-  } catch (e) {
-    return fail(e);
-  }
-  if (
-    studentId.length > 100 ||
-    name.length > 100 ||
-    (typeof body.className === "string" && body.className.length > 100)
-  )
-    return NextResponse.json(
-      { error: "Student details must be 100 characters or fewer." },
-      { status: 400 },
-    );
-  try {
+    const b = await body(request);
+    const studentId = text(b.admissionNumber ?? b.studentId, "Admission number", 100);
+    if (b.admissionNumber !== undefined && b.studentId !== undefined && text(b.studentId, "Admission number", 100) !== studentId)
+      throw new HttpError("Conflicting admission numbers supplied.");
+    const name = text(b.name, "Full name", 100).replace(/\s+/g, " ");
+    const className = text(b.className, "Class", 100).replace(/\s+/g, " ");
+    const guestLimit = b.guestLimit === undefined ? undefined : integer(b.guestLimit, "Guest limit");
     const result = await createStudentWithInvitation({
       studentId,
       name,
-      className:
-        typeof body.className === "string" ? body.className : undefined,
+      className,
       guestLimit,
     });
     return NextResponse.json(
       {
         student: {
+          admissionNumber: result.student.studentId,
           studentId: result.student.studentId,
           name: result.student.name,
           className: result.student.className,
@@ -103,7 +77,6 @@ export async function POST(request: NextRequest) {
       { status: result.created ? 201 : 200 },
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Creation failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return fail(err);
   }
 }

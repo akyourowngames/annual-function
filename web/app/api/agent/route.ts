@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { answerQuestion } from "@/lib/server/helpdesk";
 import { body, fail, HttpError, sameOrigin, text } from "@/lib/server/http";
+import { recoverInvitation } from "@/lib/server/invitation-recovery";
+import { parseRecoveryMessage } from "@/lib/invitations/identity";
 const requests = new Map<string, { count: number; until: number }>();
 export async function GET() {
   return NextResponse.json({
@@ -12,7 +14,7 @@ export async function POST(request: Request) {
   try {
     sameOrigin(request);
     const b = await body(request);
-    const message = text(b.message, "Question", 2000);
+    const message = text(b.message, "Question", 2000, !b.recovery);
     const key =
       request.headers.get("x-forwarded-for")?.split(",")[0] || "local";
     const now = Date.now();
@@ -30,6 +32,16 @@ export async function POST(request: Request) {
     });
     const code =
       text(b.code, "Invitation code", 64, false).toUpperCase() || undefined;
+    if (b.recovery && (typeof b.recovery !== "object" || Array.isArray(b.recovery)))
+      throw new HttpError("Please enter your admission number, full name, and class.");
+    const recovery = b.recovery || (!code && parseRecoveryMessage(message));
+    if (recovery) {
+      if (code) throw new HttpError("Close your current invitation before looking up another.");
+      return NextResponse.json(
+        await recoverInvitation(recovery as Record<string, unknown>, key),
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
     const history = Array.isArray(b.history)
       ? b.history
           .slice(-8)
@@ -44,7 +56,9 @@ export async function POST(request: Request) {
             content: h.content.slice(0, 2000),
           }))
       : [];
-    return NextResponse.json(await answerQuestion(message, code, history));
+    return NextResponse.json(await answerQuestion(message, code, history, key), {
+      headers: { "Cache-Control": "no-store" },
+    });
   } catch (e) {
     return fail(e);
   }

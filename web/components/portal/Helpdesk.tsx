@@ -7,13 +7,16 @@ type Message = {
   role: "user" | "assistant";
   text: string;
   source?: string;
+  recoveredCode?: string;
 };
 export default function Helpdesk({
   code,
   onAction,
+  onRecover,
 }: {
   code?: string;
   onAction?: () => Promise<void>;
+  onRecover?: (code: string) => Promise<void>;
 }) {
   const [messages, setMessages] = useState<Message[]>([
       {
@@ -27,6 +30,19 @@ export default function Helpdesk({
     [error, setError] = useState("");
   const end = useRef<HTMLDivElement>(null);
   const [pending, setPending] = useState<HelpAction | null>(null);
+  const [showRecovery, setShowRecovery] = useState(false);
+  const [identity, setIdentity] = useState({ admissionNumber: "", name: "", className: "" });
+  async function findInvitation(e: React.FormEvent) {
+    e.preventDefault();
+    await send("Find my invitation", identity);
+  }
+  async function openRecovered(value: string) {
+    setBusy(true);
+    setError("");
+    try { await onRecover?.(value); }
+    catch (e) { setError(e instanceof Error ? e.message : "Could not open your invitation."); }
+    finally { setBusy(false); }
+  }
   async function confirmAction() {
     if (!pending || !code) return;
     setBusy(true);
@@ -61,7 +77,7 @@ export default function Helpdesk({
   useEffect(() => {
     end.current?.scrollIntoView({ block: "nearest" });
   }, [messages, busy]);
-  async function send(text: string) {
+  async function send(text: string, recovery?: typeof identity) {
     if (!text.trim() || busy) return;
     const history = [...messages, { role: "user" as const, text: text.trim() }];
     setMessages(history);
@@ -73,12 +89,15 @@ export default function Helpdesk({
         reply: string;
         source: string;
         action: HelpAction | null;
+        recoveredCode?: string;
+        recoveryRequired?: boolean;
       }>("/api/agent", {
         method: "POST",
         signal: AbortSignal.timeout(65000),
         body: JSON.stringify({
           message: text,
           code,
+          recovery,
           history: messages
             .slice(-8)
             .map((m) => ({ role: m.role, content: m.text })),
@@ -86,9 +105,14 @@ export default function Helpdesk({
       });
       setMessages((m) => [
         ...m,
-        { role: "assistant", text: r.reply, source: r.source },
+        { role: "assistant", text: r.reply, source: r.source, recoveredCode: r.recoveredCode },
       ]);
       setPending(r.action);
+      if (r.recoveryRequired) setShowRecovery(true);
+      if (r.recoveredCode) {
+        setShowRecovery(false);
+        setIdentity({ admissionNumber: "", name: "", className: "" });
+      }
     } catch (e) {
       setError(
         e instanceof Error
@@ -121,6 +145,13 @@ export default function Helpdesk({
                 {m.role === "user" ? "You" : m.source || "Event helpdesk"}
               </small>
               {m.text}
+              {m.recoveredCode && onRecover && (
+                <div className="space-top">
+                  <button className="button primary small" disabled={busy} onClick={() => openRecovered(m.recoveredCode!)}>
+                    Open my invitation <Icon name="arrow" size={15} />
+                  </button>
+                </div>
+              )}
             </div>
           ))}
           {busy && (
@@ -164,6 +195,24 @@ export default function Helpdesk({
                 Cancel
               </button>
             </div>
+          </div>
+        )}
+        {!code && (
+          <div className="space-top">
+            <button className="button small" disabled={busy} aria-expanded={showRecovery} onClick={() => setShowRecovery(!showRecovery)}>
+              <Icon name="ticket" size={15} /> {showRecovery ? "Close lookup" : "Find my invitation"}
+            </button>
+            {showRecovery && (
+              <form onSubmit={findInvitation} className="space-top">
+                <p className="caption">Enter all three details as recorded by your school. Include any starting zeros in your admission number.</p>
+                <div className="form-grid space-top">
+                  <label className="field"><span>Admission number</span><input type="text" autoComplete="off" required maxLength={100} value={identity.admissionNumber} onChange={(e) => setIdentity({ ...identity, admissionNumber: e.target.value })} /></label>
+                  <label className="field"><span>Full name</span><input autoComplete="off" required maxLength={100} value={identity.name} onChange={(e) => setIdentity({ ...identity, name: e.target.value })} /></label>
+                  <label className="field"><span>Class</span><input autoComplete="off" placeholder="e.g. TULIP 1 or 2ND LILY" required maxLength={100} value={identity.className} onChange={(e) => setIdentity({ ...identity, className: e.target.value })} /></label>
+                </div>
+                <button className="button primary small" disabled={busy}>Verify my details</button>
+              </form>
+            )}
           </div>
         )}
         <div className="suggestions">
@@ -225,7 +274,7 @@ export default function Helpdesk({
               <p>
                 {code
                   ? "Your invitation is connected to this conversation."
-                  : "Open your invitation to ask about your guest allowance."}
+                  : "Use Find my invitation with your admission number, full name, and class to get your code."}
               </p>
             </div>
           </li>

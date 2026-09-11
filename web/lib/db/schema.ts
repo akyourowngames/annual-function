@@ -29,7 +29,7 @@ import {
  * ```
  *
  * Rules enforced here:
- * - student_id is unique (one roll ID → one student)
+ * - student_id is unique (one admission number → one student)
  * - invitation_code is unique (one code → one invitation)
  * - one student → one invitation (unique on invitations.student_id)
  * - guest_limit >= 0 (CHECK constraint)
@@ -39,7 +39,7 @@ import {
  */
 export const students = pgTable("students", {
   id: uuid("id").defaultRandom().primaryKey(),
-  // School roll / student ID, e.g. "10234". Unique by rule.
+  // School admission number, stored as text to preserve leading zeros.
   studentId: text("student_id").notNull().unique(),
   name: text("name").notNull(),
   className: text("class"),
@@ -128,3 +128,8 @@ export type SupportTicket = typeof supportTickets.$inferSelect;
 export type NewSupportTicket = typeof supportTickets.$inferInsert;
 export type EventSettings = typeof eventSettings.$inferSelect;
 export type NewEventSettings = typeof eventSettings.$inferInsert;
+export const invitationLookupLimits = pgTable("invitation_lookup_limits", {
+  keyHash: text("key_hash").primaryKey(),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull().defaultNow(),
+  attempts: integer("attempts").notNull().default(1),
+});

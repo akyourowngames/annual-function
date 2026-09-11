@@ -125,7 +125,7 @@ export default function AdminHome() {
       "/api/invitations",
       "POST",
       {
-        studentId: f.get("studentId"),
+        admissionNumber: f.get("admissionNumber"),
         name: f.get("name"),
         className: f.get("className"),
         guestLimit: Number(f.get("guestLimit")),
@@ -138,7 +138,7 @@ export default function AdminHome() {
     if (!data) return;
     const rows = [
       [
-        "Student ID",
+        "Admission number",
         "Name",
         "Class",
         "Invitation",
@@ -479,7 +479,7 @@ export default function AdminHome() {
                   <input
                     className="search-input"
                     aria-label="Search invitations"
-                    placeholder="Search student, class or invitation…"
+                    placeholder="Search name, admission number, class or code…"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                   />
@@ -506,8 +506,8 @@ export default function AdminHome() {
                   <form onSubmit={createInvitation} className="space-top">
                     <div className="form-grid">
                       <label className="field">
-                        <span>Student ID</span>
-                        <input name="studentId" required maxLength={100} />
+                        <span>Admission number</span>
+                        <input name="admissionNumber" type="text" required maxLength={100} autoComplete="off" placeholder="Include any starting zeros" />
                       </label>
                       <label className="field">
                         <span>Full name</span>
@@ -518,7 +518,8 @@ export default function AdminHome() {
                         <input
                           name="className"
                           maxLength={100}
-                          placeholder="e.g. 10-A"
+                          required
+                          placeholder="e.g. TULIP 1 or 2ND LILY"
                         />
                       </label>
                       <label className="field">

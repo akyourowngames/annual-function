@@ -150,6 +150,9 @@ export default function StudentHome() {
         <Icon name="shield" size={13} />
         Keep your code private. It gives access to your invitation.
       </p>
+      <button className="text-button" onClick={() => setView("helpdesk")}>
+        Need your code? Find my invitation <Icon name="arrow" size={15} />
+      </button>
     </section>
   );
   const unlocked = (
@@ -330,6 +333,11 @@ export default function StudentHome() {
           key={data?.invitation.code || "public"}
           code={data?.invitation.code}
           onAction={refresh}
+          onRecover={async (value) => {
+            await load(value);
+            setCode(value);
+            setView("invitation");
+          }}
         />
       )}
       {view === "support" &&
