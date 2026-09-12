@@ -1,6 +1,6 @@
 // The ONLY module that talks to a language model. Everything else (helpdesk,
 // whatsapp handler) calls these helpers. Swapping providers later = set the
-// four LLM_* env vars, no code change. Uses the OpenAI Responses API shape
+// three LLM_* env vars, no code change. Uses the OpenAI Responses API shape
 // (instructions + input + tools) because that is what helpdesk.ts uses today;
 // most OpenAI-compatible gateways proxy /responses unchanged.
 export function llmConfig() {
@@ -12,13 +12,15 @@ export function llmConfig() {
 export function hasLlmKey(): boolean {
   return llmConfig().apiKey.length > 0;
 }
-export type ResponseItem = { type?: string; name?: string; arguments?: string; id?: string; call_id?: string };
+export type ResponseItem = { type?: string; name?: string; arguments?: string; id?: string; call_id?: string; content?: Array<{ type?: string; text?: string }> };
 export type ResponsesRequest = {
   model?: string;
   instructions: string;
   input: unknown;
   tools?: unknown[];
   parallel_tool_calls?: boolean;
+  max_output_tokens?: number;
+  store?: boolean;
 };
 export type ResponsesResponse = { output?: ResponseItem[] };
 export async function postResponses(body: ResponsesRequest, timeoutMs = 18000): Promise<ResponsesResponse> {
