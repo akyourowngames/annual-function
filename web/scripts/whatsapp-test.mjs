@@ -2,6 +2,12 @@ import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { hasLlmKey, llmConfig, postResponses } from "../lib/server/llm-client.ts";
 import { menuText, nextMenuStep, needsTemplate, parseWebhookBody } from "../lib/server/whatsapp/menu.ts";
+import {
+  verifySignature,
+  sendText,
+  sendTemplate,
+  sendTextWithTemplateFallback,
+} from "../lib/server/whatsapp/client.ts";
 
 describe("llm-client", () => {
   const saved = { ...process.env };
@@ -136,5 +142,58 @@ describe("whatsapp menu", () => {
       assert.equal(res.step, step);
       assert.equal("value" in res, false);
     }
+  });
+});
+
+describe("whatsapp client", () => {
+  const realFetch = globalThis.fetch;
+  let calls;
+  beforeEach(() => {
+    calls = [];
+    process.env.WHATSAPP_TOKEN = "test-token";
+    process.env.WHATSAPP_PHONE_NUMBER_ID = "12345";
+    process.env.WHATSAPP_APP_SECRET = "secret";
+    globalThis.fetch = async (url, init) => {
+      calls.push({ url, init });
+      const body = JSON.parse(init.body);
+      if (body.text?.body === "trigger-window-error") {
+        return { ok: false, status: 400, json: async () => ({ error: { code: 470, message: "outside the allowed window" } }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ messages: [{ id: "wamid.1" }] }) };
+    };
+  });
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    delete process.env.WHATSAPP_TOKEN;
+    delete process.env.WHATSAPP_PHONE_NUMBER_ID;
+    delete process.env.WHATSAPP_APP_SECRET;
+  });
+  it("verifies X-Hub-Signature-256 with a fixed vector", async () => {
+    const { createHmac } = await import("node:crypto");
+    const raw = '{"hello":"world"}';
+    const sig = "sha256=" + createHmac("sha256", "secret").update(raw).digest("hex");
+    assert.equal(verifySignature(raw, sig), true);
+    assert.equal(verifySignature(raw, "sha256=deadbeef"), false);
+    assert.equal(verifySignature(raw, null), false);
+  });
+  it("sends text to the Graph messages endpoint", async () => {
+    await sendText("919999999999", "Namaste");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://graph.facebook.com/v21.0/12345/messages");
+    assert.deepStrictEqual(JSON.parse(calls[0].init.body), {
+      messaging_product: "whatsapp",
+      to: "919999999999",
+      type: "text",
+      text: { body: "Namaste" },
+    });
+  });
+  it("retries once with the faq_followup template on 24h-window errors", async () => {
+    await sendTextWithTemplateFallback("919999999999", "trigger-window-error");
+    assert.equal(calls.length, 2);
+    assert.equal(JSON.parse(calls[1].init.body).template.name, "faq_followup");
+  });
+  it("does not retry templates on other errors", async () => {
+    globalThis.fetch = async () => ({ ok: false, status: 500, json: async () => ({ error: { message: "boom" } }) });
+    await assert.rejects(() => sendText("919999999999", "hi"), /WhatsApp send failed/);
   });
 });
