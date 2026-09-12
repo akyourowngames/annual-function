@@ -133,3 +133,14 @@ export const invitationLookupLimits = pgTable("invitation_lookup_limits", {
   windowStart: timestamp("window_start", { withTimezone: true }).notNull().defaultNow(),
   attempts: integer("attempts").notNull().default(1),
 });
+export const whatsappSessions = pgTable("whatsapp_sessions", {
+  waId: text("wa_id").primaryKey(),
+  step: text("step").notNull().default("idle"),
+  payload: jsonb("payload").notNull().default({}),
+  invitationCode: text("invitation_code"),
+  attempts: integer("attempts").notNull().default(0),
+  lastUserMsgAt: timestamp("last_user_msg_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+export type WhatsappSession = typeof whatsappSessions.$inferSelect;
+export type NewWhatsappSession = typeof whatsappSessions.$inferInsert;
