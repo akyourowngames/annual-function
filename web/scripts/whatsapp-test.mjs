@@ -125,4 +125,16 @@ describe("whatsapp menu", () => {
     assert.equal(needsTemplate("2026-09-11T09:00:00Z", now), true);
     assert.equal(needsTemplate("2026-09-11T11:00:00Z", now), false);
   });
+  it("skips malformed non-array changes/messages without throwing", () => {
+    assert.deepEqual(parseWebhookBody({ entry: [{ changes: 5 }] }), []);
+    assert.deepEqual(parseWebhookBody({ entry: [{ changes: [{ value: { messages: { from: "919999999999" } } }] }] }), []);
+    assert.deepEqual(parseWebhookBody({ entry: "nope" }), []);
+  });
+  it("returns no value for blank stepwise input", () => {
+    for (const step of ["await_admission", "await_name", "await_class"]) {
+      const res = nextMenuStep(step, "   ");
+      assert.equal(res.step, step);
+      assert.equal("value" in res, false);
+    }
+  });
 });

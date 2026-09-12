@@ -8,8 +8,12 @@ export function parseWebhookBody(body: unknown): Inbound[] {
   const entries = (body as { entry?: Array<{ changes?: Array<{ value?: { messages?: unknown[] } }> }> })?.entry;
   if (!Array.isArray(entries)) return out;
   for (const entry of entries) {
-    for (const change of entry?.changes ?? []) {
-      for (const m of change?.value?.messages ?? []) {
+    const changes = (entry as { changes?: unknown })?.changes;
+    if (!Array.isArray(changes)) continue;
+    for (const change of changes) {
+      const messages = (change as { value?: { messages?: unknown } })?.value?.messages;
+      if (!Array.isArray(messages)) continue;
+      for (const m of messages) {
         const msg = m as { from?: string; type?: string; text?: { body?: string }; interactive?: { button_reply?: { id?: string }; list_reply?: { id?: string } } };
         if (typeof msg?.from !== "string") continue;
         if (msg.type === "text" && typeof msg.text?.body === "string") {
@@ -43,7 +47,9 @@ export function nextMenuStep(step: WaStep, raw: string, buttonId?: string): { st
     return { step: "idle" };
   }
   if (step === "faq") return { step: "faq" };
-  return { step, value: raw.trim() }; // stepwise verify: handler stores value and advances
+  const value = raw.trim();
+  if (!value) return { step };
+  return { step, value }; // stepwise verify: handler stores value and advances
 }
 
 // True when the last user message is older than 24h: Meta only allows
