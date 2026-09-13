@@ -8,6 +8,7 @@ import {
   sendTemplate,
   sendTextWithTemplateFallback,
 } from "../lib/server/whatsapp/client.ts";
+import { buildInvitationPdf } from "../lib/server/whatsapp/pass.ts";
 
 describe("llm-client", () => {
   const saved = { ...process.env };
@@ -79,6 +80,13 @@ describe("postResponses", () => {
     await postResponses({ instructions: "sys", input: [] });
     assert.equal(JSON.parse(seen.init.body).model, "gpt-4.1-mini");
   });
+  it("passes through max_output_tokens and store (helpdesk values)", async () => {
+    process.env.LLM_API_KEY = "test-key";
+    await postResponses({ instructions: "sys", input: [], max_output_tokens: 700, store: false });
+    const body = JSON.parse(seen.init.body);
+    assert.equal(body.max_output_tokens, 700);
+    assert.equal(body.store, false);
+  });
   it("rejects with AI provider HTTP on non-OK response", async () => {
     process.env.LLM_API_KEY = "test-key";
     globalThis.fetch = async () => ({ ok: false, status: 500, json: async () => ({}) });
@@ -107,7 +115,7 @@ describe("whatsapp menu", () => {
         }],
       }],
     };
-    assert.deepEqual(parseWebhookBody(body), [
+    assert.deepStrictEqual(parseWebhookBody(body), [
       { waId: "919999999999", text: "Hi" },
       { waId: "918888888888", text: "", buttonId: "invite" },
       { waId: "917777777777", text: "", buttonId: "faq" },
@@ -132,9 +140,9 @@ describe("whatsapp menu", () => {
     assert.equal(needsTemplate("2026-09-11T11:00:00Z", now), false);
   });
   it("skips malformed non-array changes/messages without throwing", () => {
-    assert.deepEqual(parseWebhookBody({ entry: [{ changes: 5 }] }), []);
-    assert.deepEqual(parseWebhookBody({ entry: [{ changes: [{ value: { messages: { from: "919999999999" } } }] }] }), []);
-    assert.deepEqual(parseWebhookBody({ entry: "nope" }), []);
+    assert.deepStrictEqual(parseWebhookBody({ entry: [{ changes: 5 }] }), []);
+    assert.deepStrictEqual(parseWebhookBody({ entry: [{ changes: [{ value: { messages: { from: "919999999999" } } }] }] }), []);
+    assert.deepStrictEqual(parseWebhookBody({ entry: "nope" }), []);
   });
   it("returns no value for blank stepwise input", () => {
     for (const step of ["await_admission", "await_name", "await_class"]) {
@@ -146,6 +154,7 @@ describe("whatsapp menu", () => {
 });
 
 describe("whatsapp client", () => {
+  const saved = { ...process.env };
   const realFetch = globalThis.fetch;
   let calls;
   beforeEach(() => {
@@ -164,9 +173,10 @@ describe("whatsapp client", () => {
   });
   afterEach(() => {
     globalThis.fetch = realFetch;
-    delete process.env.WHATSAPP_TOKEN;
-    delete process.env.WHATSAPP_PHONE_NUMBER_ID;
-    delete process.env.WHATSAPP_APP_SECRET;
+    for (const k of ["WHATSAPP_TOKEN", "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_APP_SECRET"]) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
   });
   it("verifies X-Hub-Signature-256 with a fixed vector", async () => {
     const { createHmac } = await import("node:crypto");
@@ -197,8 +207,6 @@ describe("whatsapp client", () => {
     await assert.rejects(() => sendText("919999999999", "hi"), /WhatsApp send failed/);
   });
 });
-
-import { buildInvitationPdf } from "../lib/server/whatsapp/pass.ts";
 
 describe("invitation pass pdf", () => {
   it("builds a non-empty PDF starting with the PDF magic header", async () => {

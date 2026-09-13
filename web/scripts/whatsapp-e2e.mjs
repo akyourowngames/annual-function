@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local", quiet: true });
 process.env.WHATSAPP_VERIFY_TOKEN ??= "e2e-verify-token";
 process.env.WHATSAPP_APP_SECRET ??= "e2e-app-secret";
+const VT = process.env.WHATSAPP_VERIFY_TOKEN;
 
 const BASE = "http://127.0.0.1:3102";
 let server;
@@ -36,7 +37,7 @@ describe("whatsapp webhook e2e", () => {
 
   it("answers the Meta verification challenge", async () => {
     const r = await fetch(
-      `${BASE}/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=e2e-verify-token&hub.challenge=CHALLENGE123`,
+      `${BASE}/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=${VT}&hub.challenge=CHALLENGE123`,
     );
     assert.equal(r.status, 200);
     assert.equal(await r.text(), "CHALLENGE123");

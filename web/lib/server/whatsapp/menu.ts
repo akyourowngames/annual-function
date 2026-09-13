@@ -55,5 +55,7 @@ export function nextMenuStep(step: WaStep, raw: string, buttonId?: string): { st
 // True when the last user message is older than 24h: Meta only allows
 // approved template messages until the family writes again.
 export function needsTemplate(lastUserMsgAt: string | Date, now: Date = new Date()): boolean {
-  return now.getTime() - new Date(lastUserMsgAt).getTime() > 24 * 60 * 60 * 1000;
+  const last = new Date(lastUserMsgAt).getTime();
+  if (Number.isNaN(last)) return true;
+  return now.getTime() - last > 24 * 60 * 60 * 1000;
 }

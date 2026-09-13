@@ -1,7 +1,7 @@
 import { getDb } from "@/lib/db";
 import { whatsappSessions, type NewWhatsappSession, type WhatsappSession } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { pushHistory, newSession, type SessionPayload } from "./history";
+import { pushHistory, newSession, type SessionPayload } from "./history.ts";
 
 // Re-exported so existing import sites keep working; canonical
 // implementations live in ./history (dependency-free, unit-testable).
@@ -14,11 +14,14 @@ export async function loadSession(waId: string): Promise<WhatsappSession | null>
 }
 
 export async function saveSession(s: NewWhatsappSession): Promise<void> {
+  // Omit the PK from the update set: the conflict target already pins the row.
+  const update = { ...s, updatedAt: new Date() };
+  delete (update as Partial<typeof update>).waId;
   await getDb()
     .insert(whatsappSessions)
     .values(s)
     .onConflictDoUpdate({
       target: whatsappSessions.waId,
-      set: { ...s, updatedAt: new Date() },
+      set: update,
     });
 }

@@ -41,7 +41,7 @@ export async function graphPost(path: string, body: unknown): Promise<{ id?: str
     e.code = err.error?.code;
     throw e;
   }
-  const data = (await res.json()) as { messages?: Array<{ id?: string }> };
+  const data = (await res.json().catch(() => ({}))) as { messages?: Array<{ id?: string }> };
   return { id: data.messages?.[0]?.id };
 }
 
@@ -56,17 +56,19 @@ export async function sendText(to: string, body: string) {
 
 // Upload a Buffer (PDF pass) to Meta, returns the media id for sendDocument.
 export async function uploadMedia(buf: Buffer, filename: string, mime = "application/pdf"): Promise<string> {
+  const token = process.env.WHATSAPP_TOKEN;
+  if (!token) throw new Error("WHATSAPP_TOKEN is not configured");
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(buf)], { type: mime }), filename);
   form.append("messaging_product", "whatsapp");
   const res = await fetch(`${GRAPH}/${phoneNumberId()}/media`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` },
+    headers: { Authorization: `Bearer ${token}` },
     body: form,
     signal: AbortSignal.timeout(30000),
   });
   if (!res.ok) throw new Error(`WhatsApp media upload failed: HTTP ${res.status}`);
-  const data = (await res.json()) as { id?: string };
+  const data = (await res.json().catch(() => ({}))) as { id?: string };
   if (!data.id) throw new Error("WhatsApp media upload returned no id");
   return data.id;
 }

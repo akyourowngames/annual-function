@@ -58,3 +58,15 @@ The older `scripts/e2e-test.mjs` is not the npm test entry point; it predates is
 ## Remaining integrations
 
 WhatsApp/Telegram delivery, vector embeddings, hosted PDF storage, and deployment are not connected by this implementation. The Python agent directory is an earlier scaffold; the working helpdesk runs in the Next.js API. No messages are sent automatically during development.
+
+## WhatsApp agent (v1)
+
+Webhook: `GET/POST https://<vercel-app>/api/whatsapp/webhook`, subscribe to `messages`.
+
+1. Meta app → WhatsApp Business Account → phone number (test number first, production later).
+2. Permanent access token → Vercel env `WHATSAPP_TOKEN`; plus `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` (any random string you invent), `WHATSAPP_APP_SECRET` (from Meta app settings).
+**Production must always set WHATSAPP_APP_SECRET — when unset, the webhook skips signature verification (local dev only).**
+3. Webhook: set URL + verify token, subscribe to `messages`. Confirm the GET challenge test in `scripts/whatsapp-e2e.mjs` passes against the deployed URL.
+4. Get two utility templates approved before launch: `invitation_ready` (code + link) and `faq_followup` (reopens >24h chats). No marketing templates in v1.
+5. Sandbox test with 2–3 real phones: Hi → 1 → admission + name + class → PDF + QR in chat → 2 FAQs (English + Hinglish).
+6. LLM is wired later: set `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` (+ `LLM_EMBED_MODEL` when embeddings arrive). No key = portal-style `official_information` fallback, same as `GET /api/agent` today.
