@@ -1,12 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { handleInbound } from "../lib/server/whatsapp/handler.ts";
+import { pushHistory, newSession } from "../lib/server/whatsapp/history.ts";
 
 function fakeDeps(overrides = {}) {
   const sent = [];
   const sessions = new Map();
   return {
     sent,
+    sessions,
     now: () => new Date("2026-09-12T10:00:00Z"),
     loadSession: async (waId) => sessions.get(waId) ?? null,
     saveSession: async (s) => {
@@ -69,5 +71,32 @@ describe("whatsapp handler", () => {
     await handleInbound(inbound("2"), d);
     await handleInbound(inbound("guest add karo"), d);
     assert.match(d.sent.at(-1).body, /portal/i);
+  });
+  it("stored history contains both user and assistant turns after an FAQ exchange", async () => {
+    const d = fakeDeps();
+    await handleInbound(inbound("2"), d);
+    await handleInbound(inbound("Program kab shuru hoga?"), d);
+    const stored = d.sessions.get("919999999999");
+    assert.ok(stored, "expected a session to be stored");
+    const history = stored.payload.history ?? [];
+    assert.ok(
+      history.some((t) => t.role === "user" && /shuru hoga/.test(t.content)),
+      "expected the user question in stored history",
+    );
+    assert.ok(
+      history.some((t) => t.role === "assistant" && /5 baje/.test(t.content)),
+      "expected the assistant reply in stored history",
+    );
+  });
+  it("shared history helpers cap at 8 and new sessions start idle", () => {
+    let p = {};
+    for (let i = 0; i < 10; i++) p = pushHistory(p, "user", `m${i}`);
+    assert.equal(p.history.length, 8);
+    assert.equal(p.history[0].content, "m2");
+    assert.equal(p.history.at(-1).content, "m9");
+    const s = newSession("919999999999");
+    assert.equal(s.waId, "919999999999");
+    assert.equal(s.step, "idle");
+    assert.deepEqual(s.payload, {});
   });
 });
