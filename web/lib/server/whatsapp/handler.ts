@@ -56,11 +56,15 @@ export async function handleInbound(inbound: Inbound, deps: HandlerDeps): Promis
   let step = (base.step ?? "idle") as WaStep;
   let payload = payloadOf(base.payload);
   const priorCode = ("invitationCode" in base ? base.invitationCode : null) ?? undefined;
+  // Once verified mid-turn, every later persist must carry the code:
+  // persist() rebuilds from the stale `base` closure, so a trailing
+  // persist({}) (e.g. inside say()) would otherwise wipe a just-stored code.
+  let verifiedCode: string | undefined;
 
   const say = async (body: string) => {
     payload = pushHistory(payload, "assistant", body);
     await deps.sendText(waId, body);
-    await persist({});
+    await persist(verifiedCode ? { invitationCode: verifiedCode } : {});
   };
   payload = pushHistory(payload, "user", inbound.text || inbound.buttonId || "");
 
@@ -112,6 +116,7 @@ export async function handleInbound(inbound: Inbound, deps: HandlerDeps): Promis
     );
     if ("recoveredCode" in result && typeof result.recoveredCode === "string") {
       const code = result.recoveredCode;
+      verifiedCode = code;
       try {
         const u = await deps.usage(code);
         const pdf = await buildInvitationPdf({

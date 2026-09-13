@@ -52,6 +52,22 @@ describe("whatsapp handler", () => {
     assert.ok(pass, "expected a pass document to be sent");
     assert.match(pass.caption, /ABC-123/);
   });
+  it("media fallback still stores the code and sends the portal link", async () => {
+    const d = fakeDeps({
+      sendPass: async () => {
+        throw new Error("upload down");
+      },
+    });
+    await handleInbound(inbound("1"), d);
+    await handleInbound(inbound("A-123"), d);
+    await handleInbound(inbound("Aarav Sharma"), d);
+    await handleInbound(inbound("5-A"), d);
+    assert.match(d.sent.at(-1).body, /portal/i);
+    assert.match(d.sent.at(-1).body, /ABC-123/);
+    const stored = d.sessions.get("919999999999");
+    assert.ok(stored, "expected a session to be stored");
+    assert.equal(stored.invitationCode, "ABC-123");
+  });
   it("failed verification replies honestly and resets to menu", async () => {
     const d = fakeDeps({ recover: async () => ({ recoveryRequired: true }) });
     await handleInbound(inbound("1"), d);
