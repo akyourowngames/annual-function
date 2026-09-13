@@ -76,6 +76,22 @@ describe("telegram handler", () => {
     assert.equal(seenKey, "tg:424242");
     assert.match(d.sent.at(-1).text, /5 baje/);
   });
+  it("media failure still stores the code and sends the portal link", async () => {
+    const d = fakeDeps({
+      sendDocument: async () => {
+        throw new Error("upload down");
+      },
+    });
+    await handleTelegramInbound(inbound("1"), d);
+    await handleTelegramInbound(inbound("A-123"), d);
+    await handleTelegramInbound(inbound("Aarav Sharma"), d);
+    await handleTelegramInbound(inbound("5-A"), d);
+    assert.match(d.sent.at(-1).text, /portal/i);
+    assert.match(d.sent.at(-1).text, /ABC-123/);
+    const stored = d.sessions.get("tg:424242");
+    assert.ok(stored, "expected a session to be stored");
+    assert.equal(stored.invitationCode, "ABC-123");
+  });
   it("non-text update parses to null -> route would answer {ok:true} with no sends", async () => {
     const d = fakeDeps();
     const parsed = parseTelegramUpdate(
