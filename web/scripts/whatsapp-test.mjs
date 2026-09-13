@@ -197,3 +197,19 @@ describe("whatsapp client", () => {
     await assert.rejects(() => sendText("919999999999", "hi"), /WhatsApp send failed/);
   });
 });
+
+import { buildInvitationPdf } from "../lib/server/whatsapp/pass.ts";
+
+describe("invitation pass pdf", () => {
+  it("builds a non-empty PDF starting with the PDF magic header", async () => {
+    const pdf = await buildInvitationPdf({
+      code: "TEST-123",
+      studentName: "Aarav Sharma",
+      guestLimit: 2,
+      qrToken: "qr-token-abc",
+    });
+    assert.ok(Buffer.isBuffer(pdf));
+    assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
+    assert.ok(pdf.length > 5000, `pdf too small: ${pdf.length} bytes`);
+  });
+});
