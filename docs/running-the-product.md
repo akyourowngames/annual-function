@@ -28,7 +28,7 @@ Staff sessions use HttpOnly cookies. Publishing official event information, edit
 
 Open **Staff workspace → Event & knowledge → Public landing page**. Edit the school name, headline, introduction, contact and accessibility guidance, chief guests, and programme. Publish to save these details in the existing event settings row. Clear **Show demo content labels** only after the details are confirmed.
 
-Until edited, the page uses Oakfield Public School and an explicitly labelled demo guest lineup and programme. Date, start time, venue, parking, dress code and entry instructions come from **Official event information**. The paper-theatre artwork is a local asset in `web/public/landing/`.
+The page publishes Everest Public School's details — name, logo, contact, social links, leaders and the Principal's note — all editable from the workspace (`scripts/apply-school-profile.mjs` applies the evergreen defaults). Date, start time, venue, parking, dress code and entry instructions come from **Official event information**. The paper-theatre artwork is a local asset in `web/public/landing/`, and the school logo/principal photo live in `web/public/eps/`.
 
 The landing page includes scroll reveals, a three-star hunt, confetti, optional sounds, a calendar download, programme and FAQ accordions, and a mobile invitation dock. Sounds start off. Reduced-motion preferences disable movement while retaining content and actions.
 

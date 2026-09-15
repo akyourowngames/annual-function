@@ -29,6 +29,7 @@ jobs:
           node --test
           scripts/markdown-test.mjs
           scripts/channels-test.mjs
+          scripts/escalation-test.mjs
           scripts/knowledge-test.mjs
           scripts/whatsapp-test.mjs
           scripts/telegram-test.mjs

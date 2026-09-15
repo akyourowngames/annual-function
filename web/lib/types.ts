@@ -39,6 +39,10 @@ export type TicketInfo = {
   status: string;
   createdAt: string;
   resolvedAt: string | null;
+  aiSummary?: string | null;
+  suggestedReply?: string | null;
+  source?: string;
+  invitationCode?: string | null;
   student?: {
     studentId: string;
     name: string;

@@ -101,6 +101,11 @@ export const supportTickets = pgTable("support_tickets", {
   category: text("category"),
   description: text("description").notNull(),
   status: text("status").notNull().default("pending"),
+  // Escalation context so staff can act in one tap.
+  aiSummary: text("ai_summary"),
+  suggestedReply: text("suggested_reply"),
+  source: text("source").notNull().default("manual"),
+  invitationCode: text("invitation_code"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   resolvedAt: timestamp("resolved_at"),
 });

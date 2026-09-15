@@ -35,7 +35,7 @@ export async function recordContact(key: string, code: string): Promise<void> {
     });
 }
 
-async function sendTextTo(channel: Channel, address: string, text: string) {
+export async function sendTextTo(channel: Channel, address: string, text: string) {
   return channel === "telegram"
     ? tgSendMessage(address, text)
     : sendTextWithTemplateFallback(address, text);

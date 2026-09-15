@@ -327,10 +327,10 @@ try {
     .getByRole("textbox", { name: "School name", exact: true })
     .waitFor();
   check(
-    "landing editor loads demo school",
+    "landing editor loads the school profile",
     (await page
       .getByRole("textbox", { name: "School name", exact: true })
-      .inputValue()) === "Oakfield Public School",
+      .inputValue()) === "Everest Public School",
   );
   const landingEditor = page
     .locator("section")

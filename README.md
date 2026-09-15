@@ -117,6 +117,8 @@ annual-function/
 - [x] Semantic knowledge base: staff PDF/doc upload + NVIDIA embeddings on pgvector
 - [x] RSVP & expected headcount, announcements/reminders, bulk pass delivery
 - [x] Live attendance wall with per-gate and per-class counts
+- [x] Real Everest Public School profile (logo, contact, leaders, Principal's note)
+- [x] Smarter escalation: staff summary + a one-tap reply drafted for every request
 
 ---
 

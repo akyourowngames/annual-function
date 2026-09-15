@@ -7,6 +7,49 @@ import { recoverInvitation } from "./invitation-recovery";
 import { identityWasSupplied } from "@/lib/invitations/identity";
 import { searchKnowledge } from "./knowledge";
 import { orTsQuery } from "./chunk";
+import { parseEscalation } from "./escalation";
+
+// Turns a family's unresolved question into a staff summary + a ready-to-send
+// reply. Best-effort: falls back to the raw question if the model is unavailable.
+async function draftEscalation(input: {
+  question: string;
+  history: { role: string; content: string }[];
+  official: unknown;
+  connected: unknown;
+}): Promise<{ summary: string; suggestedReply: string }> {
+  try {
+    const res = await chatCompletion(
+      {
+        messages: [
+          {
+            role: "system",
+            content:
+              'You help the school event team triage a family\'s unanswered question. Reply with strict JSON only: {"summary":"one or two plain sentences telling staff what the family needs","suggestedReply":"a warm, ready-to-send reply to the family in the same language they used, or an empty string if you cannot draft one"}. Use only the information provided. Never invent dates, policies, codes or guest limits.',
+          },
+          {
+            role: "user",
+            content: `Family's question: ${input.question}\n\nRecent conversation:\n${input.history
+              .slice(-4)
+              .map((h) => `${h.role}: ${h.content}`)
+              .join("\n")}\n\nOfficial event information: ${JSON.stringify(
+              input.official,
+            )}\nConnected invitation: ${JSON.stringify(input.connected)}`,
+          },
+        ],
+        tool_choice: "none",
+        max_tokens: 400,
+        temperature: 0.2,
+      },
+      15000,
+    );
+    return parseEscalation(
+      messageText(res.choices?.[0]?.message?.content),
+      input.question,
+    );
+  } catch {
+    return { summary: input.question.slice(0, 300), suggestedReply: "" };
+  }
+}
 import {
   chatCompletion,
   hasLlmKey,
@@ -308,10 +351,20 @@ Official information: ${JSON.stringify(official)}. Connected invitation: ${JSON.
               };
             }
           } else if (name === "escalate_to_staff") {
+            const staffNote = text(args.summary, "Summary", 1000);
+            const draft = await draftEscalation({
+              question: message,
+              history,
+              official,
+              connected: usage,
+            });
             const ticket = await createTicketForCode({
               code,
               category: "ai_escalation",
-              description: text(args.summary, "Summary", 1000),
+              description: staffNote,
+              summary: draft.summary,
+              suggestedReply: draft.suggestedReply,
+              source: "ai_escalation",
             });
             value = {
               ticketCreated: true,

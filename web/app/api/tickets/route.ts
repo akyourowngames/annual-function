@@ -1,8 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
-import { createTicket, listTickets, studentForCode } from "@/lib/db/queries";
+import {
+  createTicket,
+  listTickets,
+  setTicketStatus,
+  studentForCode,
+  ticketWithContact,
+} from "@/lib/db/queries";
 import { getDb } from "@/lib/db";
 import { supportTickets } from "@/lib/db/schema";
+import { sendTextTo } from "@/lib/server/delivery";
+import type { Channel } from "@/lib/server/channels";
 import { requireStaff } from "@/lib/server/auth";
 import {
   body,
@@ -59,14 +67,36 @@ export async function PATCH(request: Request) {
     sameOrigin(request);
     await requireStaff();
     const b = await body(request);
+    // One-tap reply: send the (editable) suggested reply to the family's chat.
+    if (b.action === "reply") {
+      const id = uuid(b.id);
+      const reply = text(b.message, "Reply", 2000);
+      const found = await ticketWithContact(id);
+      if (!found) throw new HttpError("Ticket not found.", 404);
+      if (!found.contact)
+        throw new HttpError(
+          "This family has no chat connection yet — copy the reply and send it another way.",
+          409,
+        );
+      try {
+        await sendTextTo(found.contact.channel as Channel, found.contact.address, reply);
+      } catch {
+        throw new HttpError(
+          "Could not deliver the reply to their chat. Copy it and send it manually.",
+          502,
+        );
+      }
+      const [ticket] = await getDb()
+        .update(supportTickets)
+        .set({ status: "resolved", resolvedAt: new Date(), suggestedReply: reply })
+        .where(eq(supportTickets.id, id))
+        .returning();
+      return NextResponse.json({ ticket, delivered: true });
+    }
     const status = text(b.status, "Status", 30);
     if (!["pending", "in_progress", "resolved"].includes(status))
       throw new HttpError("Choose a valid ticket status.");
-    const [ticket] = await getDb()
-      .update(supportTickets)
-      .set({ status, resolvedAt: status === "resolved" ? new Date() : null })
-      .where(eq(supportTickets.id, uuid(b.id)))
-      .returning();
+    const ticket = await setTicketStatus(uuid(b.id), status);
     if (!ticket) throw new HttpError("Ticket not found.", 404);
     return NextResponse.json({ ticket });
   } catch (e) {

@@ -22,7 +22,9 @@ function escapeHtml(s: string) {
 }
 // Preview WhatsApp's *bold* rendering safely (input is escaped first).
 function whatsappPreview(input: string) {
-  return escapeHtml(input.replace(/\*\*([^*\n]+?)\*\*/g, "*$1*"))
+  return escapeHtml(input)
+    .replace(/\*\*([^*\n]+?)\*\*/g, "*$1*")
+    .replace(/^[ \t]*[-*•][ \t]+/gm, "• ")
     .replace(/\*([^*\n]+?)\*/g, "<b>$1</b>")
     .replace(/\n/g, "<br/>");
 }
@@ -45,6 +47,7 @@ export default function Outreach({ classes }: { classes: string[] }) {
   const [audience, setAudience] = useState("all");
   const [resend, setResend] = useState(false);
   const [counts, setCounts] = useState<Counts | null>(null);
+  const [reachTick, setReachTick] = useState(0);
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState({ sent: 0, failed: 0 });
 
@@ -88,7 +91,13 @@ export default function Outreach({ classes }: { classes: string[] }) {
     return () => {
       alive = false;
     };
-  }, [tab, audience]);
+  }, [tab, audience, reachTick]);
+  // Keep the reachability count live while the tab is open.
+  useEffect(() => {
+    if (tab !== "invites") return;
+    const t = setInterval(() => setReachTick((v) => v + 1), 15000);
+    return () => clearInterval(t);
+  }, [tab]);
   useEffect(() => {
     if (tab !== "announce") return;
     let alive = true;
@@ -270,9 +279,14 @@ export default function Outreach({ classes }: { classes: string[] }) {
               <small>{progress.failed} failed</small>
             </section>
           </div>
-          <button className="button primary space-top" disabled={sending || !counts?.reachable} onClick={sendInvites}>
-            {sending ? `Sending… ${progress.sent}` : `Send passes to ${counts?.reachable ?? 0} families`}
-          </button>
+          <div className="button-row space-top">
+            <button className="button primary" disabled={sending || !counts?.reachable} onClick={sendInvites}>
+              {sending ? `Sending… ${progress.sent}` : `Send passes to ${counts?.reachable ?? 0} families`}
+            </button>
+            <button className="button" disabled={sending} onClick={() => setReachTick((v) => v + 1)}>
+              Recheck
+            </button>
+          </div>
           <p className="caption space-top">
             Only families who have messaged the bot can receive chat messages —
             that&rsquo;s a platform rule, not a limitation of this system. To
@@ -326,19 +340,26 @@ export default function Outreach({ classes }: { classes: string[] }) {
                 </button>
               </div>
               <div
-                style={{
-                  background: preview === "telegram" ? "#eef6ff" : "#eafaf0",
-                  border: "1px solid rgba(0,0,0,.08)",
-                  borderRadius: 14,
-                  padding: "12px 14px",
-                  minHeight: 54,
-                  fontSize: 15,
-                  lineHeight: 1.5,
-                }}
-                dangerouslySetInnerHTML={{
-                  __html: preview === "telegram" ? toTelegramHtml(body) : whatsappPreview(body),
-                }}
-              />
+                key={preview}
+                className={`chat-preview ${preview}`}
+                aria-live="polite"
+              >
+                {body.trim() ? (
+                  <span
+                    dangerouslySetInnerHTML={{
+                      __html:
+                        preview === "telegram"
+                          ? toTelegramHtml(body)
+                          : whatsappPreview(body),
+                    }}
+                  />
+                ) : (
+                  <span className="preview-empty">
+                    Your message preview appears here. Use **bold** for
+                    emphasis and start list lines with a dash.
+                  </span>
+                )}
+              </div>
             </div>
             <label className="field">
               <span>Schedule</span>

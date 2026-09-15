@@ -1,14 +1,14 @@
 "use client";
 import { useEffect, useState } from "react";
 import {
-  DEMO_LANDING,
+  SCHOOL_LANDING,
   type LandingContent,
   type ProgrammeItem,
 } from "@/lib/landing";
 import { api, type EventInfo } from "@/lib/types";
 import Icon from "@/components/ui/Icon";
 export default function LandingEditor() {
-  const [content, setContent] = useState<LandingContent>(DEMO_LANDING),
+  const [content, setContent] = useState<LandingContent>(SCHOOL_LANDING),
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState(""),
     [error, setError] = useState("");
@@ -69,8 +69,8 @@ export default function LandingEditor() {
         <div>
           <h2>Public landing page</h2>
           <p>
-            Replace the demo content when your guest lineup and programme are
-            ready.
+            Your school&rsquo;s public page — name, contact, leaders and
+            programme. Everything here is what families see.
           </p>
         </div>
         <a className="button small" href="/" target="_blank" rel="noreferrer">
@@ -279,6 +279,160 @@ export default function LandingEditor() {
             </div>
           </div>
         ))}
+        <div className="section-heading space-top">
+          <h3>School contact &amp; links</h3>
+        </div>
+        <div className="form-grid">
+          <label className="field">
+            <span>Phone</span>
+            <input
+              value={content.contactPhone ?? ""}
+              onChange={(e) => setContent((c) => ({ ...c, contactPhone: e.target.value }))}
+              maxLength={120}
+            />
+          </label>
+          <label className="field">
+            <span>Email</span>
+            <input
+              type="email"
+              value={content.contactEmail ?? ""}
+              onChange={(e) => setContent((c) => ({ ...c, contactEmail: e.target.value }))}
+              maxLength={150}
+            />
+          </label>
+          <label className="field">
+            <span>Website</span>
+            <input
+              value={content.website ?? ""}
+              onChange={(e) => setContent((c) => ({ ...c, website: e.target.value }))}
+              maxLength={300}
+            />
+          </label>
+          <label className="field">
+            <span>Logo path</span>
+            <input
+              value={content.logoUrl ?? ""}
+              onChange={(e) => setContent((c) => ({ ...c, logoUrl: e.target.value }))}
+              maxLength={300}
+              placeholder="/eps/logo.jpeg"
+            />
+          </label>
+        </div>
+        <div className="section-heading space-top">
+          <h3>Social links</h3>
+          <button
+            type="button"
+            className="button small"
+            disabled={(content.socials?.length ?? 0) >= 8}
+            onClick={() =>
+              setContent((c) => ({
+                ...c,
+                socials: [...(c.socials ?? []), { label: "", url: "" }],
+              }))
+            }
+          >
+            <Icon name="plus" size={14} />
+            Add link
+          </button>
+        </div>
+        {(content.socials ?? []).map((s, i) => (
+          <div className="form-grid space-top" key={i}>
+            <label className="field">
+              <span>Label</span>
+              <input
+                value={s.label}
+                maxLength={40}
+                onChange={(e) =>
+                  setContent((c) => ({
+                    ...c,
+                    socials: (c.socials ?? []).map((x, n) =>
+                      n === i ? { ...x, label: e.target.value } : x,
+                    ),
+                  }))
+                }
+              />
+            </label>
+            <label className="field">
+              <span>URL</span>
+              <input
+                value={s.url}
+                maxLength={300}
+                onChange={(e) =>
+                  setContent((c) => ({
+                    ...c,
+                    socials: (c.socials ?? []).map((x, n) =>
+                      n === i ? { ...x, url: e.target.value } : x,
+                    ),
+                  }))
+                }
+              />
+            </label>
+            <div className="field" style={{ alignSelf: "end" }}>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Remove link"
+                onClick={() =>
+                  setContent((c) => ({
+                    ...c,
+                    socials: (c.socials ?? []).filter((_, n) => n !== i),
+                  }))
+                }
+              >
+                <Icon name="trash" size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
+        <div className="section-heading space-top">
+          <h3>Principal&rsquo;s note</h3>
+        </div>
+        <div className="form-grid">
+          {(
+            [
+              { key: "name", label: "Name", max: 100 },
+              { key: "title", label: "Title", max: 150 },
+              { key: "photoUrl", label: "Photo path", max: 300 },
+            ] as const
+          ).map((f) => (
+            <label className="field" key={f.key}>
+              <span>{f.label}</span>
+              <input
+                value={content.principal?.[f.key] ?? ""}
+                maxLength={f.max}
+                onChange={(e) =>
+                  setContent((c) => ({
+                    ...c,
+                    principal: {
+                      name: "",
+                      title: "",
+                      message: "",
+                      photoUrl: "",
+                      ...(c.principal ?? {}),
+                      [f.key]: e.target.value,
+                    },
+                  }))
+                }
+              />
+            </label>
+          ))}
+          <label className="field wide">
+            <span>Message</span>
+            <textarea
+              value={content.principal?.message ?? ""}
+              maxLength={600}
+              onChange={(e) =>
+                setContent((c) => ({
+                  ...c,
+                  principal: {
+                    ...(c.principal ?? { name: "", title: "", message: "", photoUrl: "" }),
+                    message: e.target.value,
+                  },
+                }))
+              }
+            />
+          </label>
+        </div>
         <label className="flex items-center gap-3 text-xs text-muted my-6">
           <input
             type="checkbox"
@@ -287,7 +441,7 @@ export default function LandingEditor() {
               setContent((c) => ({ ...c, isDemo: e.target.checked }))
             }
           />
-          Show demo content labels until details are confirmed
+          Show preview labels until details are confirmed
         </label>
         <button className="button primary" disabled={busy}>
           {busy ? "Publishing…" : "Publish landing page"}
