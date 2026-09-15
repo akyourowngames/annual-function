@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import Icon from "@/components/ui/Icon";
 import { api, formatDate, type EventInfo } from "@/lib/types";
-import { DEMO_LANDING, type LandingContent } from "@/lib/landing";
+import { SCHOOL_LANDING, type LandingContent } from "@/lib/landing";
 import { Reveal, Star, usePlayground } from "./Playground";
 
 const kindIcons = {
@@ -16,7 +16,7 @@ const kindIcons = {
 };
 export default function LandingPage() {
   const [event, setEvent] = useState<EventInfo | null>(null),
-    [content, setContent] = useState<LandingContent>(DEMO_LANDING),
+    [content, setContent] = useState<LandingContent>(SCHOOL_LANDING),
     [menu, setMenu] = useState(false),
     [activeProgramme, setActiveProgramme] = useState(0),
     [eventError, setEventError] = useState("");
@@ -141,7 +141,12 @@ export default function LandingPage() {
           aria-label={`${content.schoolName} home`}
         >
           <span className="brand-bloom">
-            <Star size={30} />
+            {content.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={content.logoUrl} alt="" width={30} height={30} />
+            ) : (
+              <Star size={30} />
+            )}
           </span>
           <span>
             annual<span className="brand-period">.</span>
@@ -227,7 +232,7 @@ export default function LandingPage() {
               You’re invited to a little bit of magic.
             </div>
             <h1>
-              {content.theme === DEMO_LANDING.theme ? (
+              {content.theme === SCHOOL_LANDING.theme ? (
                 <>
                   <span>A sky full</span>
                   <span>
@@ -750,6 +755,28 @@ export default function LandingPage() {
           </button>
           <div className="finale-orbit" aria-hidden="true" />
         </section>
+        {content.principal?.name && (
+          <section className="principal-note" id="principal">
+            <div className="principal-card">
+              {content.principal.photoUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  className="principal-photo"
+                  src={content.principal.photoUrl}
+                  alt={content.principal.name}
+                />
+              )}
+              <div>
+                <span className="principal-kicker">
+                  From the Principal&rsquo;s desk
+                </span>
+                <blockquote>{content.principal.message}</blockquote>
+                <strong>{content.principal.name}</strong>
+                <small>{content.principal.title}</small>
+              </div>
+            </div>
+          </section>
+        )}
       </main>
       <footer className="play-footer">
         <div className="footer-top">
@@ -771,6 +798,22 @@ export default function LandingPage() {
             <Link href="/admin">Staff workspace</Link>
             <a href="#good-to-know">Event information</a>
           </div>
+        </div>
+        <div className="footer-contact">
+          {content.contactPhone && <span>{content.contactPhone}</span>}
+          {content.contactEmail && (
+            <a href={`mailto:${content.contactEmail}`}>{content.contactEmail}</a>
+          )}
+          {content.website && (
+            <a href={content.website} target="_blank" rel="noreferrer">
+              {content.website.replace(/^https?:\/\//, "")}
+            </a>
+          )}
+          {content.socials?.map((s) => (
+            <a key={s.url} href={s.url} target="_blank" rel="noreferrer">
+              {s.label}
+            </a>
+          ))}
         </div>
         <div className="footer-bottom">
           <span>With heart, from {content.schoolName}.</span>

@@ -10,6 +10,16 @@ export type ProgrammeItem = {
   description: string;
   kind: "welcome" | "music" | "dance" | "theatre" | "celebration";
 };
+export type SocialLink = {
+  label: string;
+  url: string;
+};
+export type PrincipalNote = {
+  name: string;
+  title: string;
+  message: string;
+  photoUrl: string;
+};
 export type LandingContent = {
   schoolName: string;
   theme: string;
@@ -18,31 +28,40 @@ export type LandingContent = {
   programme: ProgrammeItem[];
   contact: string;
   isDemo: boolean;
+  // Optional so already-published content keeps working.
+  contactPhone?: string;
+  contactEmail?: string;
+  website?: string;
+  socials?: SocialLink[];
+  logoUrl?: string;
+  principal?: PrincipalNote;
 };
 
-export const DEMO_LANDING: LandingContent = {
-  schoolName: "Oakfield Public School",
+// Evergreen default shown before the school publishes its own details from the
+// staff workspace. Replace via scripts/apply-school-profile.mjs.
+export const SCHOOL_LANDING: LandingContent = {
+  schoolName: "Everest Public School",
   theme: "A sky full of stories.",
   introduction:
-    "Big dreams. Little butterflies. A whole lot of heart. Join our young stars for an evening that’s been a year in the making.",
+    "For nearly four decades, Everest Public School has helped every child grow into their best self — academically, creatively and ethically. Join our Junior and Senior wings for an evening of music, dance and story, made by our students for the people who cheer them on.",
   guests: [
     {
-      name: "Dr. Meera Rao",
-      title: "Educator & author",
-      role: "Chief guest",
-      note: "A champion of curious minds, big questions, and the beautiful things children can become.",
-    },
-    {
-      name: "Arjun Mehta",
-      title: "Theatre artist & storyteller",
-      role: "Guest of honour",
-      note: "Turning little stories into extraordinary worlds, one stage at a time.",
-    },
-    {
-      name: "Ananya Sharma",
-      title: "Principal, Oakfield Public School",
+      name: "Priti Sharma",
+      title: "Principal, Everest Public School",
       role: "Our guiding light",
       note: "The quiet encouragement behind every brave first step onto the stage.",
+    },
+    {
+      name: "J.P. Sharma",
+      title: "Manager, Everest Public School",
+      role: "Guest of honour",
+      note: "A steward of the school and a firm believer in every child's potential.",
+    },
+    {
+      name: "Vandana Sharma",
+      title: "Vice-Principal, Everest Public School",
+      role: "Guest of honour",
+      note: "A champion of imagination, expression and the confidence to shine.",
     },
   ],
   programme: [
@@ -84,5 +103,24 @@ export const DEMO_LANDING: LandingContent = {
   ],
   contact:
     "Your class teacher or the school office can help with invitations and special arrangements.",
-  isDemo: true,
+  isDemo: false,
+  contactPhone: "8750117989, 9870414878",
+  contactEmail: "info@everestpublicschool.com",
+  website: "https://www.everestpublicschool.com",
+  socials: [
+    { label: "Facebook", url: "https://m.facebook.com/EverestPublicSchool1987/" },
+    { label: "YouTube", url: "https://www.youtube.com/@epsschool2802" },
+    { label: "Instagram", url: "https://www.instagram.com/everestschool1987/" },
+  ],
+  logoUrl: "/eps/logo.jpeg",
+  principal: {
+    name: "Priti Sharma",
+    title: "Principal, Everest Public School",
+    message:
+      "We help each child to start his/her journey to perfection. Our aim is to imbibe value-based education, spiritual and cultural essence in the students.",
+    photoUrl: "/eps/principal.jpeg",
+  },
 };
+
+// Backwards-compatible alias (older imports).
+export const DEMO_LANDING = SCHOOL_LANDING;

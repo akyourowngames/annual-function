@@ -2458,3 +2458,65 @@
     opacity: 1;
   }
 }
+
+.principal-note {
+  padding: 3rem 6vw 4rem;
+}
+.principal-card {
+  max-width: 1040px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 2rem;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(24, 20, 40, 0.08);
+  border-radius: 28px;
+  padding: 2rem 2.4rem;
+  box-shadow: 0 24px 60px rgba(24, 20, 40, 0.08);
+}
+.principal-photo {
+  width: 220px;
+  height: 260px;
+  object-fit: cover;
+  border-radius: 20px;
+}
+.principal-kicker {
+  display: inline-block;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  opacity: 0.7;
+  margin-bottom: 0.8rem;
+}
+.principal-card blockquote {
+  font-size: 1.15rem;
+  line-height: 1.6;
+  margin: 0 0 1rem;
+  font-style: italic;
+}
+.principal-card strong {
+  display: block;
+  font-size: 1rem;
+}
+.principal-card small {
+  opacity: 0.7;
+}
+.footer-contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.4rem;
+  align-items: center;
+  padding: 1.2rem 0 0.4rem;
+  opacity: 0.85;
+  font-size: 0.9rem;
+}
+@media (max-width: 720px) {
+  .principal-card {
+    grid-template-columns: 1fr;
+  }
+  .principal-photo {
+    width: 100%;
+    height: 240px;
+  }
+}

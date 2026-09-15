@@ -8,6 +8,7 @@ import Scanner from "@/components/admin/Scanner";
 import EventEditor from "@/components/admin/EventEditor";
 import Outreach from "@/components/admin/Outreach";
 import Live from "@/components/admin/Live";
+import TicketReply from "@/components/admin/TicketReply";
 import { api, formatDate, type TicketInfo } from "@/lib/types";
 type Invitation = {
   id: string;
@@ -871,6 +872,18 @@ export default function AdminHome() {
                         </span>
                       </header>
                       <p>{t.description}</p>
+                      {t.aiSummary && (
+                        <p className="caption">
+                          <strong>What they need:</strong> {t.aiSummary}
+                        </p>
+                      )}
+                      {t.suggestedReply && (
+                        <TicketReply
+                          id={t.id}
+                          suggested={t.suggestedReply}
+                          onDone={refresh}
+                        />
+                      )}
                       <footer>
                         <span>{formatDate(t.createdAt, true)}</span>
                         <div className="button-row">

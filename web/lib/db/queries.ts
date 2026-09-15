@@ -3,6 +3,7 @@ import { getDb } from "./index";
 import {
   checkIns,
   guests,
+  invitationContacts,
   invitations,
   students,
   supportTickets,
@@ -354,6 +355,9 @@ export async function createTicketForCode(input: {
   code?: string;
   category?: string;
   description: string;
+  summary?: string;
+  suggestedReply?: string;
+  source?: string;
 }) {
   const db = getDb();
   let studentId: string | null = null;
@@ -372,10 +376,42 @@ export async function createTicketForCode(input: {
       studentId,
       category: input.category ?? "other",
       description: input.description.slice(0, 2000),
+      aiSummary: input.summary?.slice(0, 1000) ?? null,
+      suggestedReply: input.suggestedReply?.slice(0, 2000) ?? null,
+      source: input.source ?? "manual",
+      invitationCode: input.code ?? null,
     })
     .returning();
   if (!ticket) throw new Error("Failed to create ticket");
   return ticket;
+}
+/** A ticket plus the family's messaging contact (for one-tap replies). */
+export async function ticketWithContact(ticketId: string) {
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(supportTickets)
+    .where(eq(supportTickets.id, ticketId))
+    .limit(1);
+  if (!row) return null;
+  const contact = row.invitationCode
+    ? ((
+        await db
+          .select()
+          .from(invitationContacts)
+          .where(eq(invitationContacts.invitationCode, row.invitationCode))
+          .limit(1)
+      )[0] ?? null)
+    : null;
+  return { ticket: row, contact };
+}
+export async function setTicketStatus(ticketId: string, status: string) {
+  const [updated] = await getDb()
+    .update(supportTickets)
+    .set({ status, resolvedAt: status === "resolved" ? new Date() : null })
+    .where(eq(supportTickets.id, ticketId))
+    .returning();
+  return updated ?? null;
 }
 /** RSVP: a family confirms attendance and how many guests are coming. */
 export async function setRsvp(
