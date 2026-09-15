@@ -219,3 +219,19 @@ export const announcements = pgTable("announcements", {
 export type InvitationContact = typeof invitationContacts.$inferSelect;
 export type Delivery = typeof deliveries.$inferSelect;
 export type Announcement = typeof announcements.$inferSelect;
+
+// Family-contributed photos (files in the private `album` Storage bucket).
+export const photos = pgTable("photos", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invitationCode: text("invitation_code"),
+  channel: text("channel").notNull(),
+  address: text("address"),
+  storagePath: text("storage_path").notNull(),
+  mime: text("mime"),
+  byteSize: integer("byte_size"),
+  caption: text("caption"),
+  status: text("status").notNull().default("pending"), // pending | approved | hidden
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+export type Photo = typeof photos.$inferSelect;
+export type NewPhoto = typeof photos.$inferInsert;

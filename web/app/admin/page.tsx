@@ -8,6 +8,7 @@ import Scanner from "@/components/admin/Scanner";
 import EventEditor from "@/components/admin/EventEditor";
 import Outreach from "@/components/admin/Outreach";
 import Live from "@/components/admin/Live";
+import Album from "@/components/admin/Album";
 import TicketReply from "@/components/admin/TicketReply";
 import { api, formatDate, type TicketInfo } from "@/lib/types";
 type Invitation = {
@@ -57,6 +58,7 @@ const NAV = [
   { id: "guests", label: "Guests", icon: "users" },
   { id: "checkin", label: "Gate check-in", icon: "scan" },
   { id: "outreach", label: "Reach families", icon: "megaphone" },
+  { id: "album", label: "Album", icon: "camera" },
   { id: "tickets", label: "Support requests", icon: "help" },
   { id: "settings", label: "Event & knowledge", icon: "settings" },
 ];
@@ -388,9 +390,11 @@ export default function AdminHome() {
                       ? "A warm welcome starts here."
                       : view === "outreach"
                         ? "Every family, in the loop."
-                        : view === "tickets"
-                          ? "A helping hand."
-                          : "Set the scene."}
+                        : view === "album"
+                          ? "Every candid moment."
+                          : view === "tickets"
+                            ? "A helping hand."
+                            : "Set the scene."}
           </h1>
           <p>
             {view === "overview"
@@ -835,6 +839,7 @@ export default function AdminHome() {
           {view === "checkin" && <Scanner onCheckIn={refresh} />}
           {view === "live" && <Live />}
           {view === "outreach" && isAdmin && <Outreach classes={classes} />}
+          {view === "album" && <Album />}
           {view === "tickets" && (
             <section className="panel">
               <div className="table-tools">

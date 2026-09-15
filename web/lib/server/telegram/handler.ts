@@ -7,6 +7,7 @@ import { buildInvitationPdf } from "../whatsapp/pass.ts";
 import type { NewWhatsappSession } from "@/lib/db/schema";
 
 export type TelegramInbound = { chatId: string; text: string };
+export type TelegramMedia = { chatId: string; fileId: string; caption: string; mime: string };
 
 export type TelegramHandlerDeps = {
   now: () => Date;
@@ -61,6 +62,31 @@ export function parseTelegramUpdate(update: unknown): TelegramInbound | null {
   const text = msg.text.trim();
   if (!text) return null;
   return { chatId: String(msg.chat.id), text };
+}
+
+// Photos (or image documents) the family shares for the event album. Non-image
+// documents, stickers, video etc. parse to null.
+export function parseTelegramMedia(update: unknown): TelegramMedia | null {
+  const msg = (update as {
+    message?: {
+      chat?: { id?: unknown };
+      caption?: unknown;
+      photo?: Array<{ file_id?: unknown }>;
+      document?: { file_id?: unknown; mime_type?: unknown };
+    };
+  })?.message;
+  if (!msg?.chat || msg.chat.id == null) return null;
+  const chatId = String(msg.chat.id);
+  const caption = typeof msg.caption === "string" ? msg.caption : "";
+  if (Array.isArray(msg.photo) && msg.photo.length) {
+    const largest = msg.photo[msg.photo.length - 1];
+    if (typeof largest?.file_id === "string")
+      return { chatId, fileId: largest.file_id, caption, mime: "image/jpeg" };
+  }
+  const doc = msg.document;
+  if (typeof doc?.file_id === "string" && typeof doc.mime_type === "string" && doc.mime_type.startsWith("image/"))
+    return { chatId, fileId: doc.file_id, caption, mime: doc.mime_type };
+  return null;
 }
 
 function payloadOf(raw: unknown): SessionPayload {

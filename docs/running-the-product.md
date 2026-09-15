@@ -65,6 +65,12 @@ Delivery needs a family's messaging endpoint, captured automatically the first t
 
 Scheduled announcements are drained by `GET /api/cron`, authorized by either `CRON_SECRET` (Vercel Cron, defined in `web/vercel.json`) or an admin session. The Live dashboard also triggers it on every poll, so reminders fire on time during the event window even on plans with daily-only crons.
 
+## Event album (family photos)
+
+Professional photographers miss the candid moments. Families can send their own photos to the bot; each one is stored in a **private Supabase Storage bucket** (`ALBUM_BUCKET`, default `album`) and recorded in `photos` with status `pending`. Staff review them in **Staff workspace → Album** — approve, hide or delete (deleting removes the stored file too). Photos are never public: the workspace renders them through short-lived signed URLs, and nothing is shown anywhere else until a human approves it.
+
+Requires `SUPABASE_SERVICE_ROLE_KEY` (server-only) in the environment; the bucket is created automatically on first upload. Telegram photos are live today (compressed, well inside the 20 MB bot download limit) — the bot accepts `message.photo` and image `message.document`, stores the photo, and replies with a confirmation. Non-image documents and other media are acknowledged and ignored. WhatsApp image ingest uses the same path but stays dark until the Meta phone number and token are configured.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push/PR: lint, `tsc --noEmit`, the unit suite, and a production build (placeholder env — no database needed). A `smoke` job runs `scripts/smoke.mjs` against the deployed app when the `SMOKE_URL` repository secret is set, and skips otherwise. Run it locally with `SMOKE_URL=https://annual-five.vercel.app node scripts/smoke.mjs`.

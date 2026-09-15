@@ -74,6 +74,26 @@ export async function uploadMedia(buf: Buffer, filename: string, mime = "applica
   return data.id;
 }
 
+// Download an inbound media object (a photo shared for the album). Meta's flow
+// is two-step: resolve the media id to a URL, then fetch the bytes with auth.
+export async function downloadMedia(mediaId: string): Promise<{ bytes: Uint8Array; mime: string }> {
+  const token = process.env.WHATSAPP_TOKEN;
+  if (!token) throw new Error("WHATSAPP_TOKEN is not configured");
+  const meta = await fetch(`${GRAPH}/${mediaId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!meta.ok) throw new Error(`WhatsApp media info failed: HTTP ${meta.status}`);
+  const info = (await meta.json().catch(() => ({}))) as { url?: string; mime_type?: string };
+  if (!info.url) throw new Error("WhatsApp media returned no url");
+  const res = await fetch(info.url, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) throw new Error(`WhatsApp media download failed: HTTP ${res.status}`);
+  return { bytes: new Uint8Array(await res.arrayBuffer()), mime: info.mime_type || "image/jpeg" };
+}
+
 export async function sendDocument(to: string, mediaId: string, filename: string, caption: string) {
   return graphPost("/messages", {
     to,

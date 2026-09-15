@@ -1300,3 +1300,73 @@
   filter: invert(0.75);
   cursor: pointer;
 }
+
+/* Event album — family-contributed photos */
+.album-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 14px;
+}
+.album-tile {
+  position: relative;
+  margin: 0;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #100e1a;
+  border: 1px solid #c5b4ed24;
+}
+.album-tile a {
+  display: block;
+  overflow: hidden;
+}
+.album-tile img {
+  display: block;
+  width: 100%;
+  height: 190px;
+  object-fit: cover;
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.album-tile:hover img {
+  transform: scale(1.05);
+}
+.album-missing {
+  height: 190px;
+  display: grid;
+  place-items: center;
+  color: #958ba5;
+  font-size: 12px;
+}
+.album-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+.album-badge.pending {
+  background: #f1e594;
+  color: #3a2f10;
+}
+.album-badge.approved {
+  background: #b7d6bb;
+  color: #1e3323;
+}
+.album-badge.hidden {
+  background: #3a3448;
+  color: #cfc4dd;
+}
+.album-tile figcaption {
+  padding: 9px 11px;
+  font-size: 11px;
+  color: #b0a7bf;
+  overflow-wrap: anywhere;
+}
+.album-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 10px 11px;
+}

@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
-import { handleTelegramInbound, liveDeps, parseTelegramUpdate } from "@/lib/server/telegram/handler";
-import { sendDocument, sendMessage } from "@/lib/server/telegram/client";
+import {
+  handleTelegramInbound,
+  liveDeps,
+  parseTelegramMedia,
+  parseTelegramUpdate,
+} from "@/lib/server/telegram/handler";
+import { downloadFile, sendDocument, sendMessage } from "@/lib/server/telegram/client";
+import { loadSession } from "@/lib/server/whatsapp/session";
+import { saveIncomingPhoto } from "@/lib/server/album";
 
-// Agent calls (vision: none) can take several seconds; give the function room.
+// Agent calls can take several seconds; give the function room.
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
@@ -20,17 +27,45 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ ok: true });
   }
-  // Non-text updates (stickers, photos, callbacks, ...) parse to null and
-  // are acknowledged with 200 and no sends.
+  // Text messages go through the agent.
   const inbound = parseTelegramUpdate(body);
-  if (!inbound) return NextResponse.json({ ok: true });
-  // Per-message try/catch + always 200: Telegram retries aggressively on
-  // non-2xx, so a poison message must not wedge the webhook — same
-  // discipline as the WhatsApp route.
-  try {
-    await handleTelegramInbound(inbound, { ...liveDeps, sendMessage, sendDocument });
-  } catch (e) {
-    console.error("telegram inbound failed", inbound.chatId, e);
+  if (inbound) {
+    // Per-message try/catch + always 200: Telegram retries aggressively on
+    // non-2xx, so a poison message must not wedge the webhook — same
+    // discipline as the WhatsApp route.
+    try {
+      await handleTelegramInbound(inbound, { ...liveDeps, sendMessage, sendDocument });
+    } catch (e) {
+      console.error("telegram inbound failed", inbound.chatId, e);
+    }
+    return NextResponse.json({ ok: true });
   }
+  // Photos shared for the event album.
+  const media = parseTelegramMedia(body);
+  if (media) {
+    try {
+      const { bytes } = await downloadFile(media.fileId);
+      const session = await loadSession(`tg:${media.chatId}`);
+      const saved = await saveIncomingPhoto({
+        channel: "telegram",
+        address: media.chatId,
+        code: session?.invitationCode ?? null,
+        buffer: Buffer.from(bytes),
+        mime: media.mime,
+        caption: media.caption,
+      });
+      await sendMessage(
+        media.chatId,
+        saved
+          ? "Thank you! Your photo has been added to the school's Annual Function album."
+          : "We couldn't save that photo right now. Please try again in a moment.",
+      );
+    } catch (e) {
+      console.error("telegram media failed", media.chatId, e);
+    }
+    return NextResponse.json({ ok: true });
+  }
+  // Non-text, non-photo updates (stickers, calls, callbacks, ...) are
+  // acknowledged with 200 and no sends.
   return NextResponse.json({ ok: true });
 }

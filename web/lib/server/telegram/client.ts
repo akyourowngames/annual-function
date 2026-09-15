@@ -84,6 +84,24 @@ async function postDocument(
   return data.result;
 }
 
+// Download a file the bot received (photos for the event album). Telegram
+// caps bot downloads at 20 MB, which is plenty for a compressed photo.
+export async function downloadFile(fileId: string): Promise<{ bytes: Uint8Array; path: string }> {
+  const result = (await botPostJson("getFile", { file_id: fileId })) as { file_path?: string };
+  if (!result?.file_path)
+    throw new TelegramError("getFile returned no path", "NO_FILE");
+  const res = await fetch(`${API}/file/bot${botToken()}/${result.file_path}`, {
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!res.ok)
+    throw new TelegramError(
+      `Telegram file download failed: HTTP ${res.status}`,
+      "DOWNLOAD_FAILED",
+      res.status,
+    );
+  return { bytes: new Uint8Array(await res.arrayBuffer()), path: result.file_path };
+}
+
 // Sends a PDF Buffer as a Telegram document (invitation pass). Multipart
 // upload, same 15s timeout discipline as text.
 export async function sendDocument(

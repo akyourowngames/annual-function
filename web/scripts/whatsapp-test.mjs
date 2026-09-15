@@ -145,7 +145,7 @@ describe("chatCompletion", () => {
 });
 
 describe("whatsapp menu", () => {
-  it("parses text, button replies, and list replies from a webhook payload", () => {
+  it("parses text, buttons, list replies, and image messages", () => {
     const body = {
       entry: [{
         changes: [{
@@ -164,6 +164,7 @@ describe("whatsapp menu", () => {
       { waId: "919999999999", text: "Hi" },
       { waId: "918888888888", text: "", buttonId: "invite" },
       { waId: "917777777777", text: "", buttonId: "faq" },
+      { waId: "919999999999", text: "", media: { id: "x", mime: "image/jpeg", caption: "" } },
     ]);
   });
   it("offers invitation vs question with numbered fallback", () => {
