@@ -265,7 +265,23 @@ export default function AdminHome() {
       </main>
     );
   if (!authenticated)
-    return <StaffLogin onLogin={() => setAuthenticated(true)} />;
+    return (
+      <StaffLogin
+        onLogin={async () => {
+          // Learn the signed-in role straight away so the navigation, name and
+          // gate routing are correct without a reload.
+          try {
+            const r = await api<{ staff: { name: string; role: string } }>("/api/auth");
+            setRole(r.staff.role);
+            setStaffName(r.staff.name);
+            if (r.staff.role === "gate") setView("checkin");
+          } catch {
+            /* fall through — the shell still opens */
+          }
+          setAuthenticated(true);
+        }}
+      />
+    );
   const isAdmin = role === "admin";
   const isGate = role === "gate";
   const navItems = NAV.filter((i) =>

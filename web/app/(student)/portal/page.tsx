@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useState } from "react";
 import Overview from "@/components/portal/Overview";
 import Rsvp from "@/components/portal/Rsvp";
-import Gallery from "@/components/portal/Gallery";
 import AppShell from "@/components/ui/AppShell";
 import Icon from "@/components/ui/Icon";
 import QrCard from "@/components/invitation/QrCard";
@@ -20,7 +19,6 @@ const NAV = [
   { id: "invitation", label: "My invitation", icon: "ticket" },
   { id: "guests", label: "My guests", icon: "users" },
   { id: "event", label: "Event details", icon: "calendar" },
-  { id: "gallery", label: "Photo album", icon: "camera" },
   { id: "helpdesk", label: "AI helpdesk", icon: "sparkle", badge: "Ask" },
   { id: "support", label: "Support", icon: "help" },
 ];
@@ -224,20 +222,16 @@ export default function StudentHome() {
                   ? "Better, together."
                   : view === "event"
                     ? "All the little details."
-                    : view === "gallery"
-                      ? "Our evening, in pictures."
-                      : view === "helpdesk"
-                        ? "A little help, anytime."
-                        : "We’re here for you."}
+                    : view === "helpdesk"
+                      ? "A little help, anytime."
+                      : "We’re here for you."}
           </h1>
           <p>
             {view === "overview"
               ? "Your invitation, your guests, and everything you need for the big day."
-              : view === "gallery"
-                ? "Candid moments shared by our families."
-                : NAV.find((n) => n.id === view)?.label === "My guests"
-                  ? "Reserve a place for the people who matter most."
-                  : "Everything you need for Annual Function 2026, in one place."}
+              : NAV.find((n) => n.id === view)?.label === "My guests"
+                ? "Reserve a place for the people who matter most."
+                : "Everything you need for Annual Function 2026, in one place."}
           </p>
         </div>
         <span className="date-chip">
@@ -346,7 +340,6 @@ export default function StudentHome() {
           </p>
         </>
       )}
-      {view === "gallery" && <Gallery />}
       {view === "helpdesk" && (
         <Helpdesk
           key={data?.invitation.code || "public"}

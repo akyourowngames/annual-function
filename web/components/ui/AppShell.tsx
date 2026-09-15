@@ -56,7 +56,7 @@ export default function AppShell({
       )}
       <aside
         id="workspace-navigation"
-        className={`workspace-sidebar no-print fixed inset-y-0 left-0 z-50 flex flex-col border-r transition-[width,transform] duration-200 ${collapsed ? "lg:w-[76px]" : "lg:w-[236px]"} w-[260px] ${open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
+        className={`workspace-sidebar no-print fixed inset-y-0 left-0 z-50 flex flex-col overflow-y-auto border-r transition-[width,transform] duration-200 ${collapsed ? "lg:w-[76px]" : "lg:w-[236px]"} w-[260px] ${open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
         <div className="flex h-[92px] shrink-0 items-center justify-between px-6">
           <Link href="/" className="workspace-brand" aria-label="Annual home">
@@ -149,16 +149,27 @@ export default function AppShell({
               <Icon name="arrow" size={13} />
             </button>
           </div>
-          <Link
-            href={admin ? "/portal" : "/admin"}
-            className={`mx-3 mb-3 flex items-center gap-3 rounded-xl px-3 py-2.5 text-[11px] text-muted transition hover:bg-lilac/5 hover:text-paper ${collapsed ? "lg:justify-center" : ""}`}
-            title={admin ? "Student portal" : "Staff workspace"}
-          >
-            <Icon name={admin ? "ticket" : "shield"} size={16} />
-            <span className={hidden}>
-              {admin ? "Student portal" : "Staff workspace"}
-            </span>
-          </Link>
+          {(admin
+            ? [
+                { href: "/portal", icon: "ticket", label: "Student portal" },
+                { href: "/gate", icon: "scan", label: "Gate check-in" },
+              ]
+            : [
+                { href: "/gallery", icon: "camera", label: "Photo album" },
+                { href: "/admin", icon: "shield", label: "Staff workspace" },
+                { href: "/gate", icon: "scan", label: "Gate check-in" },
+              ]
+          ).map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={`mx-3 mb-1.5 flex items-center gap-3 rounded-xl px-3 py-2.5 text-[11px] text-muted transition hover:bg-lilac/5 hover:text-paper ${collapsed ? "lg:justify-center" : ""}`}
+              title={link.label}
+            >
+              <Icon name={link.icon} size={16} />
+              <span className={hidden}>{link.label}</span>
+            </Link>
+          ))}
           <div className="workspace-user flex min-h-[76px] items-center gap-2.5 px-4">
             <span className="workspace-avatar flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold">
               {name ? name.slice(0, 2).toUpperCase() : admin ? "ST" : "AF"}

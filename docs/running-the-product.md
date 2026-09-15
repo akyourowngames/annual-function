@@ -77,7 +77,7 @@ Requires `SUPABASE_SERVICE_ROLE_KEY` (server-only) in the environment; the bucke
 
 ## Public photo gallery (`/gallery`)
 
-`/gallery` is a standalone public page — no login, linked from the landing footer. It renders only when staff publish it (**Staff workspace → Gallery → Publish gallery**, stored as `event_settings.gallery_enabled`, off by default). Even then it shows **approved photos only**, served as short-lived signed URLs from the private bucket; pending and hidden photos are never exposed. Unpublishing takes the page dark within a refresh (visitors see "the album isn't open yet"). Moderating (approve/hide/delete) requires staff; publishing requires an administrator. Families also get the same album as a **Photo album** tab in the student portal (same rules, portal styling).
+`/gallery` is a standalone public page — no login, linked from the landing footer and from the **Photo album** link in the student portal sidebar. It renders only when staff publish it (**Staff workspace → Gallery → Publish gallery**, stored as `event_settings.gallery_enabled`, off by default). Even then it shows **approved photos only**, served as short-lived signed URLs from the private bucket; pending and hidden photos are never exposed. Unpublishing takes the page dark within a refresh (visitors see "the album isn't open yet"). Moderating (approve/hide/delete) requires staff; publishing requires an administrator.
 
 ## Continuous integration
 

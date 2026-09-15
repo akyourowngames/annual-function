@@ -1371,17 +1371,6 @@
   padding: 0 10px 11px;
 }
 
-/* Portal gallery tile (button wrapper around the photo) */
-.album-open {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  cursor: zoom-in;
-  overflow: hidden;
-}
-
 /* Gate keeper entrance (/gate) */
 .gate-page {
   min-height: 100vh;
