@@ -22,7 +22,9 @@ function escapeHtml(s: string) {
 }
 // Preview WhatsApp's *bold* rendering safely (input is escaped first).
 function whatsappPreview(input: string) {
-  return escapeHtml(input.replace(/\*\*([^*\n]+?)\*\*/g, "*$1*"))
+  return escapeHtml(input)
+    .replace(/\*\*([^*\n]+?)\*\*/g, "*$1*")
+    .replace(/^[ \t]*[-*•][ \t]+/gm, "• ")
     .replace(/\*([^*\n]+?)\*/g, "<b>$1</b>")
     .replace(/\n/g, "<br/>");
 }
@@ -338,19 +340,26 @@ export default function Outreach({ classes }: { classes: string[] }) {
                 </button>
               </div>
               <div
-                style={{
-                  background: preview === "telegram" ? "#eef6ff" : "#eafaf0",
-                  border: "1px solid rgba(0,0,0,.08)",
-                  borderRadius: 14,
-                  padding: "12px 14px",
-                  minHeight: 54,
-                  fontSize: 15,
-                  lineHeight: 1.5,
-                }}
-                dangerouslySetInnerHTML={{
-                  __html: preview === "telegram" ? toTelegramHtml(body) : whatsappPreview(body),
-                }}
-              />
+                key={preview}
+                className={`chat-preview ${preview}`}
+                aria-live="polite"
+              >
+                {body.trim() ? (
+                  <span
+                    dangerouslySetInnerHTML={{
+                      __html:
+                        preview === "telegram"
+                          ? toTelegramHtml(body)
+                          : whatsappPreview(body),
+                    }}
+                  />
+                ) : (
+                  <span className="preview-empty">
+                    Your message preview appears here. Use **bold** for
+                    emphasis and start list lines with a dash.
+                  </span>
+                )}
+              </div>
             </div>
             <label className="field">
               <span>Schedule</span>

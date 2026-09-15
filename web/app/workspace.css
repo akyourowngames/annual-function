@@ -1252,3 +1252,51 @@
     display: none;
   }
 }
+
+/* Channel preview bubbles — Reach families composer */
+.chat-preview {
+  border-radius: 16px 16px 16px 6px;
+  padding: 13px 16px;
+  min-height: 56px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: #f5f1e8;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  animation: paper-enter 0.25s ease-out;
+}
+.chat-preview.telegram {
+  background: #223450;
+  border: 1px solid #7aa2d24a;
+}
+.chat-preview.whatsapp {
+  background: #1d3524;
+  border: 1px solid #7fc79a45;
+  border-radius: 16px 16px 6px 16px;
+}
+.chat-preview b,
+.chat-preview strong {
+  color: #ffffff;
+}
+.chat-preview code {
+  background: #ffffff16;
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-size: 0.9em;
+}
+.chat-preview pre {
+  margin: 6px 0 0;
+  background: #00000055;
+  border-radius: 10px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-size: 0.85em;
+}
+.chat-preview .preview-empty {
+  color: #958ba5;
+}
+.field input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+.field input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.75);
+  cursor: pointer;
+}

@@ -475,6 +475,59 @@ export default function LandingPage() {
           )}
         </section>
 
+        {content.principal?.name && (
+          <section id="principal" className="play-section principal-section">
+            <Reveal>
+              <div className="section-kicker">
+                <span className="dash" />
+                From the Principal&rsquo;s desk
+              </div>
+            </Reveal>
+            <Reveal delay={70}>
+              <article className="principal-note-card">
+                <span className="principal-star" aria-hidden="true">
+                  <Star size={34} />
+                </span>
+                <div className="principal-frame">
+                  {content.principal.photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      className="principal-photo"
+                      src={content.principal.photoUrl}
+                      alt={`${content.principal.name}, ${content.principal.title}`}
+                    />
+                  ) : (
+                    <span className="principal-initials" aria-hidden="true">
+                      {content.principal.name
+                        .split(" ")
+                        .map((n) => n[0])
+                        .slice(0, 2)
+                        .join("")}
+                    </span>
+                  )}
+                  <span className="paper-tape" />
+                </div>
+                <div className="principal-copy">
+                  <blockquote>{content.principal.message}</blockquote>
+                  <h3>{content.principal.name}</h3>
+                  <span className="principal-role">{content.principal.title}</span>
+                  {content.website && (
+                    <a
+                      className="principal-web"
+                      href={content.website}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {content.website.replace(/^https?:\/\//, "")}
+                      <Icon name="arrow" size={13} />
+                    </a>
+                  )}
+                </div>
+              </article>
+            </Reveal>
+          </section>
+        )}
+
         <section id="programme" className="play-section programme-section">
           <div className="programme-intro">
             <Reveal>
@@ -755,28 +808,6 @@ export default function LandingPage() {
           </button>
           <div className="finale-orbit" aria-hidden="true" />
         </section>
-        {content.principal?.name && (
-          <section className="principal-note" id="principal">
-            <div className="principal-card">
-              {content.principal.photoUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  className="principal-photo"
-                  src={content.principal.photoUrl}
-                  alt={content.principal.name}
-                />
-              )}
-              <div>
-                <span className="principal-kicker">
-                  From the Principal&rsquo;s desk
-                </span>
-                <blockquote>{content.principal.message}</blockquote>
-                <strong>{content.principal.name}</strong>
-                <small>{content.principal.title}</small>
-              </div>
-            </div>
-          </section>
-        )}
       </main>
       <footer className="play-footer">
         <div className="footer-top">
