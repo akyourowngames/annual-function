@@ -826,6 +826,7 @@ export default function LandingPage() {
           </p>
           <div>
             <Link href="/portal">Invitation portal</Link>
+            <Link href="/gallery">Photo album</Link>
             <Link href="/admin">Staff workspace</Link>
             <a href="#good-to-know">Event information</a>
           </div>

@@ -17,9 +17,10 @@ type Payload = {
   photos: Photo[];
   counts: { pending: number; approved: number; hidden: number };
   total: number;
+  galleryEnabled: boolean;
 };
 
-export default function Album() {
+export default function Album({ canPublish }: { canPublish: boolean }) {
   const [data, setData] = useState<Payload | null>(null);
   const [filter, setFilter] = useState("all");
   const [busy, setBusy] = useState(false);
@@ -72,6 +73,22 @@ export default function Album() {
     }
   }
 
+  async function toggleGallery() {
+    if (!data) return;
+    setBusy(true);
+    try {
+      await api("/api/album", {
+        method: "PATCH",
+        body: JSON.stringify({ galleryEnabled: !data.galleryEnabled }),
+      });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not change the gallery.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!data) return <p className="loading-line">{error || "Loading album…"}</p>;
   const shown = data.photos.filter((p) => filter === "all" || p.status === filter);
 
@@ -82,6 +99,40 @@ export default function Album() {
           {error}
         </p>
       )}
+      <section className="panel" style={{ marginBottom: 20 }}>
+        <div className="section-heading">
+          <div>
+            <h2>Public gallery</h2>
+            <p>
+              A page anyone can open at <strong>/gallery</strong>. Only approved
+              photos ever appear there.
+            </p>
+          </div>
+          <Icon name="camera" />
+        </div>
+        <div className="button-row" style={{ marginTop: 14 }}>
+          <span className={`badge ${data.galleryEnabled ? "success" : "warning"}`}>
+            {data.galleryEnabled ? "Published" : "Private"}
+          </span>
+          <a className="button small" href="/gallery" target="_blank" rel="noreferrer">
+            Open /gallery <Icon name="arrow" size={14} />
+          </a>
+          {canPublish && (
+            <button
+              className={`button small ${data.galleryEnabled ? "" : "primary"}`}
+              disabled={busy}
+              onClick={toggleGallery}
+            >
+              {data.galleryEnabled ? "Unpublish gallery" : "Publish gallery"}
+            </button>
+          )}
+        </div>
+        {!canPublish && (
+          <p className="caption space-top">
+            Only administrators can publish or hide the public gallery.
+          </p>
+        )}
+      </section>
       <div className="stats-grid">
         {[
           { label: "Photos", value: data.total, detail: "Shared by families" },

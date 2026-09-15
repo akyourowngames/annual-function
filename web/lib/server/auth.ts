@@ -2,9 +2,10 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
 import { HttpError } from "./http";
+import { canCheckIn, canManage, isAdmin, type Role } from "./roles";
 export type Staff = {
   id: string;
-  role: "admin" | "staff";
+  role: Role;
   name: string;
 };
 const COOKIE = "annual_staff";
@@ -30,9 +31,9 @@ function signature(value: string) {
     .update(value)
     .digest("base64url");
 }
-export function accessKeySession() {
+export function accessKeySession(role: Role = "admin") {
   const payload = Buffer.from(
-    JSON.stringify({ exp: Date.now() + 8 * 60 * 60 * 1000 }),
+    JSON.stringify({ role, exp: Date.now() + 8 * 60 * 60 * 1000 }),
   ).toString("base64url");
   return `key.${payload}.${signature(payload)}`;
 }
@@ -48,11 +49,10 @@ export async function setSession(value: string, maxAge = 3600) {
 export async function clearSession() {
   (await cookies()).delete(COOKIE);
 }
-export async function requireStaff(adminOnly = false): Promise<Staff> {
+async function resolveStaff(): Promise<Staff> {
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token)
     throw new HttpError("Sign in to the staff workspace to continue.", 401);
-  let staff: Staff;
   if (token.startsWith("key.")) {
     const [, payload, sig] = token.split(".");
     if (
@@ -65,31 +65,54 @@ export async function requireStaff(adminOnly = false): Promise<Staff> {
         "Your session has expired. Please sign in again.",
         401,
       );
+    let parsed: { role?: unknown; exp?: number };
     try {
-      if (
-        JSON.parse(Buffer.from(payload, "base64url").toString()).exp <
-        Date.now()
-      )
-        throw new Error();
+      parsed = JSON.parse(Buffer.from(payload, "base64url").toString());
+      if (!parsed.exp || parsed.exp < Date.now()) throw new Error();
     } catch {
       throw new HttpError(
         "Your session has expired. Please sign in again.",
         401,
       );
     }
-    staff = {
-      id: "access-key-admin",
-      role: "admin",
-      name: "Event administrator",
+    // Tokens issued before roles existed default to administrator.
+    const role: Role = parsed.role === "gate" ? "gate" : "admin";
+    return {
+      id: `access-key-${role}`,
+      role,
+      name: role === "gate" ? "Gate keeper" : "Event administrator",
     };
-  } else {
-    const { data, error } = await supabaseAuth().auth.getUser(token);
-    const role = data.user?.app_metadata?.role;
-    if (error || !data.user || !["admin", "staff"].includes(role))
-      throw new HttpError("An authorized staff account is required.", 401);
-    staff = { id: data.user.id, role, name: data.user.email || "Event team" };
   }
-  if (adminOnly && staff.role !== "admin")
+  const { data, error } = await supabaseAuth().auth.getUser(token);
+  const role = data.user?.app_metadata?.role;
+  if (
+    error ||
+    !data.user ||
+    !["admin", "staff", "gate"].includes(role)
+  )
+    throw new HttpError("An authorized staff account is required.", 401);
+  return { id: data.user.id, role, name: data.user.email || "Event team" };
+}
+/** Any signed-in account (staff, admin or gate keeper) — used to read the session. */
+export async function requireSession(): Promise<Staff> {
+  return resolveStaff();
+}
+/** Staff/admin only — gate keepers are refused. */
+export async function requireStaff(adminOnly = false): Promise<Staff> {
+  const staff = await resolveStaff();
+  if (adminOnly && !isAdmin(staff.role))
     throw new HttpError("Administrator access is required.", 403);
+  if (!adminOnly && !canManage(staff.role))
+    throw new HttpError(
+      "Your account can only scan passes at the gate.",
+      403,
+    );
+  return staff;
+}
+/** Anything that may work the gate scanner, including gate keepers. */
+export async function requireCheckIn(): Promise<Staff> {
+  const staff = await resolveStaff();
+  if (!canCheckIn(staff.role))
+    throw new HttpError("A staff or gate account is required.", 403);
   return staff;
 }

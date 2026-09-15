@@ -58,7 +58,7 @@ const NAV = [
   { id: "guests", label: "Guests", icon: "users" },
   { id: "checkin", label: "Gate check-in", icon: "scan" },
   { id: "outreach", label: "Reach families", icon: "megaphone" },
-  { id: "album", label: "Album", icon: "camera" },
+  { id: "album", label: "Gallery", icon: "camera" },
   { id: "tickets", label: "Support requests", icon: "help" },
   { id: "settings", label: "Event & knowledge", icon: "settings" },
 ];
@@ -73,6 +73,8 @@ function matchesSearch(
 export default function AdminHome() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null),
     [data, setData] = useState<Dashboard | null>(null),
+    [role, setRole] = useState<string>(""),
+    [staffName, setStaffName] = useState<string>(""),
     [view, setView] = useState("overview"),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
@@ -107,9 +109,13 @@ export default function AdminHome() {
   }, []);
   useEffect(() => {
     let alive = true;
-    api("/api/auth")
-      .then(() => {
-        if (alive) setAuthenticated(true);
+    api<{ staff: { name: string; role: string } }>("/api/auth")
+      .then((r) => {
+        if (!alive) return;
+        setRole(r.staff.role);
+        setStaffName(r.staff.name);
+        if (r.staff.role === "gate") setView("checkin");
+        setAuthenticated(true);
       })
       .catch(() => {
         if (alive) setAuthenticated(false);
@@ -119,7 +125,7 @@ export default function AdminHome() {
     };
   }, []);
   useEffect(() => {
-    if (!authenticated) return;
+    if (!authenticated || role === "gate") return;
     let alive = true;
     api<Dashboard>("/api/admin")
       .then((result) => {
@@ -131,7 +137,7 @@ export default function AdminHome() {
     return () => {
       alive = false;
     };
-  }, [authenticated, refresh]);
+  }, [authenticated, role, refresh]);
   async function action<T = unknown>(
     path: string,
     method: string,
@@ -260,7 +266,11 @@ export default function AdminHome() {
     );
   if (!authenticated)
     return <StaffLogin onLogin={() => setAuthenticated(true)} />;
-  const isAdmin = data?.staff.role === "admin";
+  const isAdmin = role === "admin";
+  const isGate = role === "gate";
+  const navItems = NAV.filter((i) =>
+    isGate ? i.id === "checkin" : (i.id !== "settings" && i.id !== "outreach") || isAdmin,
+  );
   const canSelect = view === "invitations" && isAdmin;
   const filtered = data?.invitations.filter((i) => matchesSearch(i, search)) || [];
   const classes = [
@@ -356,7 +366,7 @@ export default function AdminHome() {
   return (
     <AppShell
       active={view}
-      items={NAV.filter((i) => (i.id !== "settings" && i.id !== "outreach") || isAdmin)}
+      items={navItems}
       onNavigate={(id) => {
         setView(id);
         setSearch("");
@@ -364,12 +374,14 @@ export default function AdminHome() {
         setError("");
       }}
       admin
-      name={data?.staff.name}
+      name={staffName || data?.staff.name}
       onLogout={async () => {
         try {
           await api("/api/auth", { method: "DELETE" });
           setAuthenticated(false);
           setData(null);
+          setRole("");
+          setStaffName("");
         } catch {
           setError("Could not sign out. Please try again.");
         }
@@ -402,16 +414,18 @@ export default function AdminHome() {
               : NAV.find((n) => n.id === view)?.label}
           </p>
         </div>
-        <button
-          className="button"
-          disabled={busy}
-          onClick={() => {
-            setError("");
-            void refresh().catch((e) => setError(e.message));
-          }}
-        >
-          Refresh
-        </button>
+        {!isGate && (
+          <button
+            className="button"
+            disabled={busy}
+            onClick={() => {
+              setError("");
+              void refresh().catch((e) => setError(e.message));
+            }}
+          >
+            Refresh
+          </button>
+        )}
       </div>
       {error && (
         <p className="notice error" role="alert">
@@ -423,7 +437,9 @@ export default function AdminHome() {
           {notice}
         </p>
       )}
-      {!data ? (
+      {isGate ? (
+        <Scanner onCheckIn={async () => {}} />
+      ) : !data ? (
         <p className="loading-line">Loading event data…</p>
       ) : (
         <>
@@ -839,7 +855,7 @@ export default function AdminHome() {
           {view === "checkin" && <Scanner onCheckIn={refresh} />}
           {view === "live" && <Live />}
           {view === "outreach" && isAdmin && <Outreach classes={classes} />}
-          {view === "album" && <Album />}
+          {view === "album" && <Album canPublish={isAdmin} />}
           {view === "tickets" && (
             <section className="panel">
               <div className="table-tools">

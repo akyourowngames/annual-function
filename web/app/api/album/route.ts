@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { photos } from "@/lib/db/schema";
+import { eventSettings, photos } from "@/lib/db/schema";
 import { requireStaff } from "@/lib/server/auth";
 import { body, fail, HttpError, sameOrigin, text, uuid } from "@/lib/server/http";
 import { deletePhoto, signedPhotoUrl } from "@/lib/server/storage";
@@ -11,7 +11,8 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     await requireStaff();
-    const rows = await getDb()
+    const db = getDb();
+    const rows = await db
       .select()
       .from(photos)
       .orderBy(desc(photos.createdAt))
@@ -33,8 +34,18 @@ export async function GET() {
       const key = p.status as keyof typeof counts;
       if (key in counts) counts[key]++;
     }
+    const [event] = await db
+      .select()
+      .from(eventSettings)
+      .orderBy(desc(eventSettings.updatedAt))
+      .limit(1);
     return NextResponse.json(
-      { photos: items, counts, total: rows.length },
+      {
+        photos: items,
+        counts,
+        total: rows.length,
+        galleryEnabled: Boolean(event?.galleryEnabled),
+      },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (e) {
@@ -45,8 +56,24 @@ export async function GET() {
 export async function PATCH(request: Request) {
   try {
     sameOrigin(request);
-    await requireStaff();
     const b = await body(request);
+    // Publishing the public gallery is an administrator decision.
+    if (typeof b.galleryEnabled === "boolean") {
+      await requireStaff(true);
+      const db = getDb();
+      const [current] = await db
+        .select()
+        .from(eventSettings)
+        .orderBy(desc(eventSettings.updatedAt))
+        .limit(1);
+      if (!current) throw new HttpError("Save your event details first.", 409);
+      await db
+        .update(eventSettings)
+        .set({ galleryEnabled: b.galleryEnabled, updatedAt: new Date() })
+        .where(eq(eventSettings.id, current.id));
+      return NextResponse.json({ galleryEnabled: b.galleryEnabled });
+    }
+    await requireStaff();
     const status = text(b.status, "Status", 20);
     if (!["pending", "approved", "hidden"].includes(status))
       throw new HttpError("Choose a valid photo status.");

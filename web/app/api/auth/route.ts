@@ -3,10 +3,11 @@ import {
   accessKeySession,
   clearSession,
   equal,
-  requireStaff,
+  requireSession,
   setSession,
   supabaseAuth,
 } from "@/lib/server/auth";
+import { roleLabel, type Role } from "@/lib/server/roles";
 import { body, fail, HttpError, sameOrigin, text } from "@/lib/server/http";
 const attempts = new Map<
   string,
@@ -17,7 +18,7 @@ const attempts = new Map<
 >();
 export async function GET() {
   try {
-    return NextResponse.json({ staff: await requireStaff() });
+    return NextResponse.json({ staff: await requireSession() });
   } catch (e) {
     return fail(e);
   }
@@ -42,32 +43,31 @@ export async function POST(request: Request) {
     const b = await body(request);
     if (b.accessKey) {
       const key = text(b.accessKey, "Access key", 500);
-      if (
-        !process.env.ADMIN_ACCESS_KEY ||
-        !equal(key, process.env.ADMIN_ACCESS_KEY)
-      )
+      const adminKey = process.env.ADMIN_ACCESS_KEY;
+      const gateKey = process.env.GATE_ACCESS_KEY;
+      let role: Role | null = null;
+      if (adminKey && equal(key, adminKey)) role = "admin";
+      else if (gateKey && equal(key, gateKey)) role = "gate";
+      if (!role)
         throw new HttpError(
-          "The staff access key is incorrect or has not been configured.",
+          "The access key is incorrect or has not been configured.",
           401,
         );
-      await setSession(accessKeySession(), 8 * 3600);
+      await setSession(accessKeySession(role), 8 * 3600);
       attempts.delete(ip);
       return NextResponse.json({
-        staff: {
-          id: "access-key-admin",
-          name: "Event administrator",
-          role: "admin",
-        },
+        staff: { id: `access-key-${role}`, name: roleLabel(role), role },
       });
     }
     const { data, error } = await supabaseAuth().auth.signInWithPassword({
       email: text(b.email, "Email"),
       password: text(b.password, "Password", 500),
     });
+    const supabaseRole = data.user?.app_metadata?.role;
     if (
       error ||
       !data.session ||
-      !["admin", "staff"].includes(data.user?.app_metadata?.role)
+      !["admin", "staff", "gate"].includes(supabaseRole)
     )
       throw new HttpError(
         "Sign-in failed. Use an account authorized by your school.",
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
       staff: {
         id: data.user.id,
         name: data.user.email,
-        role: data.user.app_metadata.role,
+        role: supabaseRole,
       },
     });
   } catch (e) {

@@ -120,6 +120,8 @@ export const eventSettings = pgTable("event_settings", {
   dressCode: text("dress_code"),
   parkingInfo: text("parking_info"),
   entryInfo: text("entry_info"),
+  // Public /gallery switch; approved photos only, off by default.
+  galleryEnabled: boolean("gallery_enabled").notNull().default(false),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 export type Student = typeof students.$inferSelect;
