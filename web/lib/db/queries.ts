@@ -333,3 +333,125 @@ export async function studentForCode(code: string) {
   if (!row) throw new Error("Invitation not found");
   return row.student;
 }
+/** Registered guests for an invitation, for the chat agent's guest-list answers. */
+export async function listGuestsForCode(code: string) {  return getDb()
+    .select({
+      name: guests.name,
+      relationship: guests.relationship,
+      status: guests.status,
+    })
+    .from(guests)
+    .innerJoin(invitations, eq(guests.invitationId, invitations.id))
+    .where(eq(invitations.invitationCode, code))
+    .orderBy(asc(guests.createdAt));
+}
+/**
+ * Create a support ticket from the chat agent. When a valid invitation code is
+ * supplied the ticket is linked to that student; otherwise it is recorded
+ * unlinked so escalations from unverified families are never lost.
+ */
+export async function createTicketForCode(input: {
+  code?: string;
+  category?: string;
+  description: string;
+}) {
+  const db = getDb();
+  let studentId: string | null = null;
+  if (input.code) {
+    const [row] = await db
+      .select({ id: students.id })
+      .from(invitations)
+      .innerJoin(students, eq(invitations.studentId, students.id))
+      .where(eq(invitations.invitationCode, input.code))
+      .limit(1);
+    studentId = row?.id ?? null;
+  }
+  const [ticket] = await db
+    .insert(supportTickets)
+    .values({
+      studentId,
+      category: input.category ?? "other",
+      description: input.description.slice(0, 2000),
+    })
+    .returning();
+  if (!ticket) throw new Error("Failed to create ticket");
+  return ticket;
+}
+/** RSVP: a family confirms attendance and how many guests are coming. */
+export async function setRsvp(
+  code: string,
+  input: { status: "attending" | "declined"; guestCount?: number; note?: string },
+) {
+  return getDb().transaction(async (tx) => {
+    const [inv] = await tx
+      .select()
+      .from(invitations)
+      .where(eq(invitations.invitationCode, code))
+      .limit(1)
+      .for("update");
+    if (!inv) throw new Error("Invitation not found");
+    if (inv.status !== "active") throw new Error("Invitation is not active");
+    if (input.status !== "attending" && input.status !== "declined")
+      throw new Error("Please choose attending or declined.");
+    const [registered] = await tx
+      .select({ value: count() })
+      .from(guests)
+      .where(eq(guests.invitationId, inv.id));
+    let rsvpGuests: number | null = null;
+    if (input.status === "attending") {
+      const requested = input.guestCount ?? registered.value ?? 0;
+      if (!Number.isInteger(requested) || requested < 0)
+        throw new Error("Choose how many guests are coming.");
+      if (requested > inv.guestLimit)
+        throw new Error(`Your invitation allows at most ${inv.guestLimit} guests.`);
+      rsvpGuests = requested;
+    }
+    const [updated] = await tx
+      .update(invitations)
+      .set({
+        rsvpStatus: input.status,
+        rsvpGuests,
+        rsvpNote: input.note ? input.note.slice(0, 500) : null,
+        rsvpAt: new Date(),
+      })
+      .where(eq(invitations.id, inv.id))
+      .returning();
+    return updated;
+  });
+}
+/** Admin: response rate, expected headcount, and per-class breakdown. */
+export async function rsvpSummary() {
+  const rows = await getDb()
+    .select({
+      status: invitations.rsvpStatus,
+      guests: invitations.rsvpGuests,
+      className: students.className,
+      code: invitations.invitationCode,
+      name: students.name,
+    })
+    .from(invitations)
+    .innerJoin(students, eq(invitations.studentId, students.id));
+  const attending = rows.filter((r) => r.status === "attending");
+  const declined = rows.filter((r) => r.status === "declined");
+  const pending = rows.filter((r) => r.status === "pending");
+  const byClass = new Map<string, { className: string; total: number; attending: number; expected: number }>();
+  for (const r of rows) {
+    const key = (r.className ?? "Unassigned").trim() || "Unassigned";
+    const bucket = byClass.get(key) ?? { className: key, total: 0, attending: 0, expected: 0 };
+    bucket.total++;
+    if (r.status === "attending") {
+      bucket.attending++;
+      bucket.expected += r.guests ?? 0;
+    }
+    byClass.set(key, bucket);
+  }
+  return {
+    invitations: rows.length,
+    attending: attending.length,
+    declined: declined.length,
+    pending: pending.length,
+    expectedGuests: attending.reduce((sum, r) => sum + (r.guests ?? 0), 0),
+    responseRate: rows.length ? Math.round(((attending.length + declined.length) / rows.length) * 100) : 0,
+    byClass: [...byClass.values()].sort((a, b) => b.expected - a.expected || a.className.localeCompare(b.className)),
+  };
+}

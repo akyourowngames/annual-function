@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Overview from "@/components/portal/Overview";
+import Rsvp from "@/components/portal/Rsvp";
 import AppShell from "@/components/ui/AppShell";
 import Icon from "@/components/ui/Icon";
 import QrCard from "@/components/invitation/QrCard";
@@ -244,12 +245,23 @@ export default function StudentHome() {
         </p>
       )}
       {view === "overview" && (
-        <Overview
-          event={event}
-          data={data}
-          invitation={data ? unlocked : lookup}
-          onNavigate={setView}
-        />
+        <>
+          <Overview
+            event={event}
+            data={data}
+            invitation={data ? unlocked : lookup}
+            onNavigate={setView}
+          />
+          {data && (
+            <Rsvp
+              code={data.invitation.code}
+              guestLimit={data.invitation.guestLimit}
+              registered={data.registered}
+              rsvp={data.rsvp}
+              onDone={refresh}
+            />
+          )}
+        </>
       )}
       {view === "invitation" &&
         (data ? (

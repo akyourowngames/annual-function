@@ -6,6 +6,8 @@ import { Star } from "@/components/landing/Playground";
 import StaffLogin from "@/components/admin/StaffLogin";
 import Scanner from "@/components/admin/Scanner";
 import EventEditor from "@/components/admin/EventEditor";
+import Outreach from "@/components/admin/Outreach";
+import Live from "@/components/admin/Live";
 import { api, formatDate, type TicketInfo } from "@/lib/types";
 type Invitation = {
   id: string;
@@ -49,9 +51,11 @@ type Dashboard = {
 };
 const NAV = [
   { id: "overview", label: "Overview", icon: "grid" },
+  { id: "live", label: "Live event", icon: "pulse" },
   { id: "invitations", label: "Invitations", icon: "ticket" },
   { id: "guests", label: "Guests", icon: "users" },
   { id: "checkin", label: "Gate check-in", icon: "scan" },
+  { id: "outreach", label: "Reach families", icon: "megaphone" },
   { id: "tickets", label: "Support requests", icon: "help" },
   { id: "settings", label: "Event & knowledge", icon: "settings" },
 ];
@@ -256,6 +260,13 @@ export default function AdminHome() {
   const isAdmin = data?.staff.role === "admin";
   const canSelect = view === "invitations" && isAdmin;
   const filtered = data?.invitations.filter((i) => matchesSearch(i, search)) || [];
+  const classes = [
+    ...new Set(
+      (data?.invitations || [])
+        .map((i) => i.className)
+        .filter((c): c is string => Boolean(c)),
+    ),
+  ].sort();
   const invitationTable = (
     <div className="table-wrap">
       <table className="data-table">
@@ -342,7 +353,7 @@ export default function AdminHome() {
   return (
     <AppShell
       active={view}
-      items={NAV.filter((i) => i.id !== "settings" || isAdmin)}
+      items={NAV.filter((i) => (i.id !== "settings" && i.id !== "outreach") || isAdmin)}
       onNavigate={(id) => {
         setView(id);
         setSearch("");
@@ -366,15 +377,19 @@ export default function AdminHome() {
           <h1>
             {view === "overview"
               ? "Every detail. One place."
-              : view === "invitations"
-                ? "Everyone’s on the list."
-                : view === "guests"
-                  ? "The people joining us."
-                  : view === "checkin"
-                    ? "A warm welcome starts here."
-                    : view === "tickets"
-                      ? "A helping hand."
-                      : "Set the scene."}
+              : view === "live"
+                ? "The big night, live."
+                : view === "invitations"
+                  ? "Everyone’s on the list."
+                  : view === "guests"
+                    ? "The people joining us."
+                    : view === "checkin"
+                      ? "A warm welcome starts here."
+                      : view === "outreach"
+                        ? "Every family, in the loop."
+                        : view === "tickets"
+                          ? "A helping hand."
+                          : "Set the scene."}
           </h1>
           <p>
             {view === "overview"
@@ -817,6 +832,8 @@ export default function AdminHome() {
             </section>
           )}
           {view === "checkin" && <Scanner onCheckIn={refresh} />}
+          {view === "live" && <Live />}
+          {view === "outreach" && isAdmin && <Outreach classes={classes} />}
           {view === "tickets" && (
             <section className="panel">
               <div className="table-tools">

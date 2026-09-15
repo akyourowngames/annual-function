@@ -33,6 +33,8 @@ const paths: Record<string, string> = {
   mail: "M3 5h18v14H3z m0 1 9 7 9-7",
   trash: "M3 6h18M9 6V3h6v3 M5 6l1 15h12l1-15M10 10v7m4-7v7",
   menu: "M4 6h16M4 12h16M4 18h16",
+  megaphone: "M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1z M15 8a5 5 0 0 1 0 8",
+  pulse: "M3 12h4l2-6 4 12 2-6h6",
 };
 export default function Icon({
   name,

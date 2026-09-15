@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
   integer,
@@ -62,6 +63,11 @@ export const invitations = pgTable(
     qrToken: text("qr_token").notNull().unique(),
     guestLimit: integer("guest_limit").notNull().default(4),
     status: text("status").notNull().default("active"),
+    // RSVP: pending | attending | declined
+    rsvpStatus: text("rsvp_status").notNull().default("pending"),
+    rsvpGuests: integer("rsvp_guests"),
+    rsvpNote: text("rsvp_note"),
+    rsvpAt: timestamp("rsvp_at", { withTimezone: true }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [
@@ -87,6 +93,7 @@ export const checkIns = pgTable("check_ins", {
   guestId: uuid("guest_id").references(() => guests.id),
   checkedInAt: timestamp("checked_in_at").defaultNow().notNull(),
   checkedInBy: text("checked_in_by"),
+  gate: text("gate"),
 });
 export const supportTickets = pgTable("support_tickets", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -144,3 +151,66 @@ export const whatsappSessions = pgTable("whatsapp_sessions", {
 });
 export type WhatsappSession = typeof whatsappSessions.$inferSelect;
 export type NewWhatsappSession = typeof whatsappSessions.$inferInsert;
+// Staff-uploaded knowledge (PDF/text), chunked for retrieval-augmented answers.
+// The `embedding halfvec(2048)` column lives in SQL only (drizzle has no native
+// vector type); retrieval reads it through raw SQL. NULL until an embeddings
+// model is configured, so lexical search keeps working without it.
+export const knowledgeSources = pgTable("knowledge_sources", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  title: text("title").notNull(),
+  filename: text("filename"),
+  byteSize: integer("byte_size"),
+  charCount: integer("char_count").notNull().default(0),
+  chunkCount: integer("chunk_count").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+export const knowledgeChunks = pgTable("knowledge_chunks", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sourceId: uuid("source_id")
+    .notNull()
+    .references(() => knowledgeSources.id, { onDelete: "cascade" }),
+  chunkIndex: integer("chunk_index").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+export type KnowledgeSource = typeof knowledgeSources.$inferSelect;
+export type KnowledgeChunk = typeof knowledgeChunks.$inferSelect;
+
+// A family's reachable messaging endpoint, learned when they chat and verify.
+export const invitationContacts = pgTable("invitation_contacts", {
+  invitationCode: text("invitation_code")
+    .primaryKey()
+    .references(() => invitations.invitationCode, { onDelete: "cascade" }),
+  channel: text("channel").notNull(), // telegram | whatsapp
+  address: text("address").notNull(), // chat id / wa id
+  optedInAt: timestamp("opted_in_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+// Every outbound message we attempt (invitation | announcement | reminder).
+export const deliveries = pgTable("deliveries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  kind: text("kind").notNull(),
+  refId: uuid("ref_id"),
+  invitationCode: text("invitation_code"),
+  channel: text("channel").notNull(),
+  address: text("address").notNull(),
+  status: text("status").notNull().default("pending"), // sent | failed | skipped
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+});
+// Staff announcements and scheduled reminders.
+export const announcements = pgTable("announcements", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  title: text("title"),
+  body: text("body").notNull(),
+  audience: text("audience").notNull().default("all"),
+  status: text("status").notNull().default("draft"), // draft | scheduled | sending | sent | cancelled
+  sendAt: timestamp("send_at", { withTimezone: true }),
+  isReminder: boolean("is_reminder").notNull().default(false),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+export type InvitationContact = typeof invitationContacts.$inferSelect;
+export type Delivery = typeof deliveries.$inferSelect;
+export type Announcement = typeof announcements.$inferSelect;

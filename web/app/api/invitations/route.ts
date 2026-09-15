@@ -29,6 +29,11 @@ export async function GET(request: NextRequest) {
       remaining: usage.remaining,
       checkIns: checkInCount,
       guests,
+      rsvp: {
+        status: usage.invitation.rsvpStatus,
+        guests: usage.invitation.rsvpGuests,
+        note: usage.invitation.rsvpNote,
+      },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Lookup failed";
