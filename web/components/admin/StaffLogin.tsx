@@ -130,8 +130,8 @@ export default function StaffLogin({ onLogin }: { onLogin: () => void }) {
             </form>
             <p className="security-note">
               <Icon name="shield" size={15} />
-              For authorized school and event staff. A gate keeper key opens the
-              scanner only.
+              For authorized school and event staff. Gate keepers sign in at{" "}
+              <Link href="/gate">/gate</Link>.
             </p>
             <Link href="/portal" className="staff-link">
               Return to the student portal

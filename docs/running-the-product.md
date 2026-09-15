@@ -24,7 +24,7 @@ Staff sign in with Supabase email/password accounts whose `app_metadata.role` is
 
 - **admin** — everything: invitations, guests, check-in, tickets, outreach, album, plus publishing official information, the landing page and the public gallery.
 - **staff** — day-to-day operations: invitations, guests, gate check-in, ticket replies, announcements/reminders and album moderation.
-- **gate** — gate keepers: the QR scanner only. They can verify a pass and check guests in (`/api/check-in`); every other staff endpoint answers 403, and their workspace shows that single screen.
+- **gate** — gate keepers: the QR scanner only. They sign in at **`/gate`** (or the staff login) with the gate key, get a single scanner screen, can verify a pass and check guests in (`/api/check-in`); every other staff endpoint answers 403.
 
 Sessions are HttpOnly cookies that carry the role. Publishing official event information, editing the landing page, changing guest allowances and publishing the public gallery require the administrator role.
 
@@ -77,7 +77,7 @@ Requires `SUPABASE_SERVICE_ROLE_KEY` (server-only) in the environment; the bucke
 
 ## Public photo gallery (`/gallery`)
 
-`/gallery` is a standalone public page — no login, linked from the landing footer. It renders only when staff publish it (**Staff workspace → Gallery → Publish gallery**, stored as `event_settings.gallery_enabled`, off by default). Even then it shows **approved photos only**, served as short-lived signed URLs from the private bucket; pending and hidden photos are never exposed. Unpublishing takes the page dark within a refresh (visitors see "the album isn't open yet"). Moderating (approve/hide/delete) requires staff; publishing requires an administrator.
+`/gallery` is a standalone public page — no login, linked from the landing footer. It renders only when staff publish it (**Staff workspace → Gallery → Publish gallery**, stored as `event_settings.gallery_enabled`, off by default). Even then it shows **approved photos only**, served as short-lived signed URLs from the private bucket; pending and hidden photos are never exposed. Unpublishing takes the page dark within a refresh (visitors see "the album isn't open yet"). Moderating (approve/hide/delete) requires staff; publishing requires an administrator. Families also get the same album as a **Photo album** tab in the student portal (same rules, portal styling).
 
 ## Continuous integration
 
