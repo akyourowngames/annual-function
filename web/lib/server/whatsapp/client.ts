@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { toWhatsappMarkup } from "../markdown.ts";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 
@@ -51,7 +52,7 @@ export function isWindowError(e: unknown): boolean {
 }
 
 export async function sendText(to: string, body: string) {
-  return graphPost("/messages", { to, type: "text", text: { body } });
+  return graphPost("/messages", { to, type: "text", text: { body: toWhatsappMarkup(body) } });
 }
 
 // Upload a Buffer (PDF pass) to Meta, returns the media id for sendDocument.
@@ -77,7 +78,7 @@ export async function sendDocument(to: string, mediaId: string, filename: string
   return graphPost("/messages", {
     to,
     type: "document",
-    document: { id: mediaId, filename, caption },
+    document: { id: mediaId, filename, caption: toWhatsappMarkup(caption) },
   });
 }
 

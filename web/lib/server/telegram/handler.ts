@@ -1,6 +1,6 @@
 import type { answerQuestion } from "@/lib/server/helpdesk";
 import type { recoverInvitation } from "@/lib/server/invitation-recovery";
-import type { getGuestUsage } from "@/lib/db/queries";
+import type { getGuestUsage, createTicketForCode } from "@/lib/db/queries";
 import { menuText, nextMenuStep, type WaStep } from "../whatsapp/menu.ts";
 import { pushHistory, newSession, type SessionPayload } from "../whatsapp/history.ts";
 import { buildInvitationPdf } from "../whatsapp/pass.ts";
@@ -17,6 +17,8 @@ export type TelegramHandlerDeps = {
   recover: typeof recoverInvitation;
   answer: typeof answerQuestion;
   usage: typeof getGuestUsage;
+  createTicket: typeof createTicketForCode;
+  recordContact?: (key: string, code: string) => Promise<void>;
 };
 
 // NOTE on imports: same discipline as the WhatsApp handler — the brain/DB
@@ -40,6 +42,10 @@ export const liveDeps: TelegramHandlerDeps = {
   answer: (...args: Parameters<typeof answerQuestion>) =>
     import("../helpdesk").then((m) => m.answerQuestion(...args)),
   usage: (code: string) => import("../../db/queries").then((m) => m.getGuestUsage(code)),
+  createTicket: (input) =>
+    import("../../db/queries").then((m) => m.createTicketForCode(input)),
+  recordContact: (key, code) =>
+    import("../delivery").then((m) => m.recordContact(key, code)),
 };
 
 const PORTAL_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://annual-five.vercel.app";
@@ -59,7 +65,22 @@ export function parseTelegramUpdate(update: unknown): TelegramInbound | null {
 
 function payloadOf(raw: unknown): SessionPayload {
   const p = (raw ?? {}) as SessionPayload;
-  return { admission: p.admission, name: p.name, className: p.className, history: p.history };
+  return {
+    admission: p.admission,
+    name: p.name,
+    className: p.className,
+    history: p.history,
+    pending: p.pending,
+  };
+}
+
+const YES = /^(yes+|y|ya|yeah|yep|haan?|ha|ok(ay)?|sure|confirm|theek|thik|kar ?do)\b/i;
+const NO = /^(no+|n|nahi?|nah|cancel|stop|mat)\b/i;
+
+// The only text that should still get the canned menu: an explicit ask for it.
+function isMenuRequest(raw: string): boolean {
+  const t = raw.trim().toLowerCase();
+  return ["menu", "help", "start", "/start", "/help", "cancel", "0"].includes(t);
 }
 
 // Test-only mirror of the WhatsApp conversation flow, Telegram-simple:
@@ -94,6 +115,39 @@ export async function handleTelegramInbound(inbound: TelegramInbound, deps: Tele
 
   // Menu routing on every message (numbers, keywords).
   const route = nextMenuStep(step, inbound.text);
+
+  // A proposed ticket the family is confirming (or declining).
+  if (payload.pending) {
+    const pending = payload.pending;
+    if (YES.test(inbound.text.trim())) {
+      payload = { history: payload.history };
+      step = "idle";
+      try {
+        const ticket = await deps.createTicket({
+          code: priorCode,
+          category: pending.category,
+          description: pending.description,
+        });
+        await say(
+          `Done! Aapka request event team ke paas bhej diya. Ticket reference: ${ticket.id
+            .slice(0, 8)
+            .toUpperCase()} (status: ${ticket.status}).`,
+        );
+      } catch (e) {
+        console.error("telegram ticket failed", key, e);
+        await say(
+          "Ticket banaane me dikkat aayi. Please portal ke Support se dobara bhejein.",
+        );
+      }
+      return;
+    }
+    if (NO.test(inbound.text.trim())) {
+      payload = { history: payload.history };
+      step = "idle";
+      await say("Theek hai, cancel kar diya. Aur kuch poochna chahenge?");
+      return;
+    }
+  }
   if (route.step === "idle" && step !== "idle" && !route.value) {
     step = "idle";
     payload = { history: payload.history };
@@ -106,13 +160,12 @@ export async function handleTelegramInbound(inbound: TelegramInbound, deps: Tele
       await say("Apna admission number bhejein. (Radd karne ke liye 'cancel' likhein.)");
       return;
     }
-    if (route.step === "faq") {
-      step = "faq";
-      await say("Apna sawal likhkar bhejein — schedule, venue, dress code, parking, kuch bhi.");
+    if (isMenuRequest(inbound.text)) {
+      await say(menuText());
       return;
     }
-    await say(menuText());
-    return;
+    // Anything else is a real message: hand it to the agent, no canned reply.
+    step = "faq";
   }
 
   // Stepwise invitation verification: collect 3 fields, then ONE backend call
@@ -138,6 +191,13 @@ export async function handleTelegramInbound(inbound: TelegramInbound, deps: Tele
     if ("recoveredCode" in result && typeof result.recoveredCode === "string") {
       const code = result.recoveredCode;
       verifiedCode = code;
+      if (deps.recordContact) {
+        try {
+          await deps.recordContact(key, code);
+        } catch (e) {
+          console.error("contact capture failed", key, e);
+        }
+      }
       try {
         const u = await deps.usage(code);
         const pdf = await buildInvitationPdf({
@@ -176,6 +236,21 @@ export async function handleTelegramInbound(inbound: TelegramInbound, deps: Tele
     return;
   }
   if ("action" in res && res.action) {
+    if (res.action.kind === "create_ticket") {
+      payload = {
+        ...payload,
+        pending: {
+          kind: "create_ticket",
+          category: res.action.category,
+          description: res.action.description,
+        },
+      };
+      step = "idle";
+      await say(
+        `Main ye request event team ko bhej sakta hoon:\n“${res.action.description}”\n\nConfirm karne ke liye *yes* likhein, cancel ke liye *no*.`,
+      );
+      return;
+    }
     await say(`Ye kaam portal se hoga (${PORTAL_URL}/portal). Chat me main sirf invitation aur jaankari de sakta hun. Kya poochna chahenge?`);
     return;
   }

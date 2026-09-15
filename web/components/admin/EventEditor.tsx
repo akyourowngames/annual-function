@@ -8,9 +8,17 @@ type Document = {
   title: string;
   content: string;
 };
+type Source = {
+  id: string;
+  title: string;
+  filename: string | null;
+  chunkCount: number;
+  charCount: number;
+};
 export default function EventEditor() {
   const [event, setEvent] = useState<EventInfo | null>(null),
     [docs, setDocs] = useState<Document[]>([]),
+    [sources, setSources] = useState<Source[]>([]),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false);
@@ -34,8 +42,12 @@ export default function EventEditor() {
       .catch((e) => setError(e.message));
     api<{
       documents: Document[];
+      sources: Source[];
     }>("/api/knowledge")
-      .then((r) => setDocs(r.documents))
+      .then((r) => {
+        setDocs(r.documents);
+        setSources(r.sources ?? []);
+      })
       .catch((e) => setError(e.message));
   }, []);
   async function saveEvent(e: React.FormEvent<HTMLFormElement>) {
@@ -76,6 +88,32 @@ export default function EventEditor() {
       setNotice("Knowledge article published.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not publish article.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function uploadSource(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const data = new FormData(form);
+    if (!(data.get("file") instanceof File) || (data.get("file") as File).size === 0) {
+      setError("Choose a PDF file to upload.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const r = await api<{ source: Source; chunkCount: number }>(
+        "/api/knowledge/upload",
+        { method: "POST", body: data },
+      );
+      setSources((s) => [r.source, ...s]);
+      form.reset();
+      setNotice(
+        `Uploaded “${r.source.title}” — indexed ${r.chunkCount} searchable passages. The helpdesk can use it now.`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not upload document.");
     } finally {
       setBusy(false);
     }
@@ -181,6 +219,74 @@ export default function EventEditor() {
               Publish article
             </button>
           </form>
+          <form onSubmit={uploadSource} style={{ marginTop: 18 }}>
+            <label className="field">
+              <span>Upload a document</span>
+              <input
+                type="file"
+                name="file"
+                accept=".pdf,.docx,.doc,.txt,.md,.csv,.tsv,.json,.html,.htm,.rtf,.log,.xml,.yaml,.yml"
+                required
+              />
+            </label>
+            <label className="field">
+              <span>Document title (optional)</span>
+              <input
+                name="title"
+                maxLength={300}
+                placeholder="e.g. Annual function programme 2026"
+              />
+            </label>
+            <button className="button full" disabled={busy}>
+              Upload &amp; index
+            </button>
+            <p className="caption" style={{ marginTop: 8 }}>
+              PDF, Word (.docx/.doc), HTML, RTF, and text files (.txt, .md, .csv,
+              .json, …) are read and split into searchable passages the helpdesk
+              answers from.
+            </p>
+          </form>
+          {sources.length > 0 && (
+            <div className="ticket-list" style={{ marginTop: 14 }}>
+              {sources.map((s) => (
+                <article className="support-ticket" key={s.id}>
+                  <header>
+                    <strong>{s.title}</strong>
+                    <button
+                      className="icon-button"
+                      aria-label={`Remove ${s.title}`}
+                      disabled={busy}
+                      onClick={async () => {
+                        setBusy(true);
+                        try {
+                          await api("/api/knowledge", {
+                            method: "DELETE",
+                            body: JSON.stringify({ id: s.id, kind: "source" }),
+                          });
+                          setSources((old) => old.filter((x) => x.id !== s.id));
+                          setNotice("Document removed from the helpdesk.");
+                        } catch (e) {
+                          setError(
+                            e instanceof Error
+                              ? e.message
+                              : "Could not remove document.",
+                          );
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                    >
+                      <Icon name="trash" size={15} />
+                    </button>
+                  </header>
+                  <p className="caption">
+                    {s.chunkCount} passages
+                    {s.filename ? ` · ${s.filename}` : ""}
+                  </p>
+                </article>
+              ))}
+            </div>
+          )}
           <div className="ticket-list">
             {docs.map((d) => (
               <article className="support-ticket" key={d.id}>

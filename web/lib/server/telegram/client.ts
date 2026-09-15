@@ -1,5 +1,7 @@
 const API = "https://api.telegram.org";
 
+import { stripMarkdown, toTelegramHtml } from "../markdown.ts";
+
 export class TelegramError extends Error {
   code?: string;
   status?: number;
@@ -39,21 +41,33 @@ async function botPostJson(method: string, payload: Record<string, unknown>): Pr
 }
 
 export async function sendMessage(chatId: string, text: string): Promise<unknown> {
-  return botPostJson("sendMessage", { chat_id: chatId, text });
+  // Render the model's light Markdown as Telegram HTML. If Telegram rejects
+  // the entities for any reason, fall back to plain text so a reply never
+  // fails to send.
+  try {
+    return await botPostJson("sendMessage", {
+      chat_id: chatId,
+      text: toTelegramHtml(text),
+      parse_mode: "HTML",
+    });
+  } catch (e) {
+    console.error("telegram formatted send failed; retrying plain", e);
+    return botPostJson("sendMessage", { chat_id: chatId, text: stripMarkdown(text) });
+  }
 }
 
-// Sends a PDF Buffer as a Telegram document (test-only path for the
-// invitation pass). Multipart upload, same 15s timeout discipline as text.
-export async function sendDocument(
+async function postDocument(
   chatId: string,
   pdf: Buffer,
   filename: string,
   caption: string,
+  parseMode?: "HTML",
 ): Promise<unknown> {
   const form = new FormData();
   form.append("chat_id", chatId);
   form.append("document", new Blob([new Uint8Array(pdf)], { type: "application/pdf" }), filename);
   if (caption) form.append("caption", caption);
+  if (parseMode) form.append("parse_mode", parseMode);
   const res = await fetch(`${API}/bot${botToken()}/sendDocument`, {
     method: "POST",
     body: form,
@@ -69,3 +83,21 @@ export async function sendDocument(
   }
   return data.result;
 }
+
+// Sends a PDF Buffer as a Telegram document (invitation pass). Multipart
+// upload, same 15s timeout discipline as text.
+export async function sendDocument(
+  chatId: string,
+  pdf: Buffer,
+  filename: string,
+  caption: string,
+): Promise<unknown> {
+  try {
+    return await postDocument(chatId, pdf, filename, toTelegramHtml(caption), "HTML");
+  } catch (e) {
+    if (!caption) throw e;
+    console.error("telegram document caption failed; retrying plain", e);
+    return postDocument(chatId, pdf, filename, stripMarkdown(caption));
+  }
+}
+

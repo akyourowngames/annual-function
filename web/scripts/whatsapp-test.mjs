@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { hasLlmKey, llmConfig, postResponses } from "../lib/server/llm-client.ts";
+import { hasLlmKey, llmConfig, chatCompletion, messageText } from "../lib/server/llm-client.ts";
 import { menuText, nextMenuStep, needsTemplate, parseWebhookBody } from "../lib/server/whatsapp/menu.ts";
 import {
   verifySignature,
@@ -33,15 +33,15 @@ describe("llm-client", () => {
     delete process.env.OPENAI_API_KEY;
     assert.equal(hasLlmKey(), false);
   });
-  it("defaults base URL to OpenAI and strips trailing slash", () => {
+  it("defaults base URL to the Kilo gateway and strips trailing slash", () => {
     delete process.env.LLM_BASE_URL;
-    assert.equal(llmConfig().baseUrl, "https://api.openai.com/v1");
+    assert.equal(llmConfig().baseUrl, "https://api.kilo.ai/api/gateway");
     process.env.LLM_BASE_URL = "https://gateway.example.com/v1/";
     assert.equal(llmConfig().baseUrl, "https://gateway.example.com/v1");
   });
 });
 
-describe("postResponses", () => {
+describe("chatCompletion", () => {
   const saved = { ...process.env };
   const realFetch = globalThis.fetch;
   let seen;
@@ -49,7 +49,11 @@ describe("postResponses", () => {
     seen = null;
     globalThis.fetch = async (url, init) => {
       seen = { url, init };
-      return { ok: true, status: 200, json: async () => ({ output: [] }) };
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ choices: [{ message: { role: "assistant", content: "ok" } }] }),
+      };
     };
   });
   afterEach(() => {
@@ -59,43 +63,84 @@ describe("postResponses", () => {
       else process.env[k] = saved[k];
     }
   });
-  it("posts to {baseUrl}/responses with bearer key and LLM_MODEL override", async () => {
+  it("posts to {baseUrl}/chat/completions with bearer key and LLM_MODEL override", async () => {
     process.env.LLM_BASE_URL = "https://gateway.example.com/v1";
     process.env.LLM_API_KEY = "test-key";
     process.env.LLM_MODEL = "custom-model";
-    await postResponses({ instructions: "sys", input: [] });
-    assert.equal(seen.url, "https://gateway.example.com/v1/responses");
+    await chatCompletion({ messages: [{ role: "user", content: "hi" }] });
+    assert.equal(seen.url, "https://gateway.example.com/v1/chat/completions");
     assert.equal(seen.init.method, "POST");
     assert.equal(seen.init.headers.Authorization, "Bearer test-key");
-    assert.equal(JSON.parse(seen.init.body).model, "custom-model");
+    const body = JSON.parse(seen.init.body);
+    assert.equal(body.model, "custom-model");
+    assert.deepEqual(body.messages, [{ role: "user", content: "hi" }]);
   });
-  it("falls back to OPENAI_MODEL and then the default model", async () => {
+  it("falls back to OPENAI_MODEL and then the free default model", async () => {
     process.env.LLM_BASE_URL = "https://gateway.example.com/v1";
     process.env.LLM_API_KEY = "test-key";
     delete process.env.LLM_MODEL;
     process.env.OPENAI_MODEL = "gpt-x";
-    await postResponses({ instructions: "sys", input: [] });
+    await chatCompletion({ messages: [] });
     assert.equal(JSON.parse(seen.init.body).model, "gpt-x");
     delete process.env.OPENAI_MODEL;
-    await postResponses({ instructions: "sys", input: [] });
-    assert.equal(JSON.parse(seen.init.body).model, "gpt-4.1-mini");
+    await chatCompletion({ messages: [] });
+    assert.equal(JSON.parse(seen.init.body).model, "kilo-auto/free");
   });
-  it("passes through max_output_tokens and store (helpdesk values)", async () => {
+  it("fails over to the next model when one errors", async () => {
     process.env.LLM_API_KEY = "test-key";
-    await postResponses({ instructions: "sys", input: [], max_output_tokens: 700, store: false });
+    process.env.LLM_MODEL = "primary-model";
+    const tried = [];
+    globalThis.fetch = async (url, init) => {
+      tried.push(JSON.parse(init.body).model);
+      if (tried.length === 1) return { ok: false, status: 503, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "recovered" } }] }) };
+    };
+    const out = await chatCompletion({ messages: [] });
+    assert.equal(tried[0], "primary-model");
+    assert.ok(tried.length >= 2, "expected a fallback attempt");
+    assert.equal(out.choices[0].message.content, "recovered");
+  });
+  it("fails over when a model replies with empty content", async () => {
+    process.env.LLM_API_KEY = "test-key";
+    process.env.LLM_MODEL = "empty-model";
+    const tried = [];
+    globalThis.fetch = async (url, init) => {
+      tried.push(JSON.parse(init.body).model);
+      if (tried.length === 1)
+        return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "" } }] }) };
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "second" } }] }) };
+    };
+    const out = await chatCompletion({ messages: [] });
+    assert.ok(tried.length >= 2);
+    assert.equal(out.choices[0].message.content, "second");
+  });
+  it("passes through max_tokens, temperature, and tools", async () => {
+    process.env.LLM_API_KEY = "test-key";
+    await chatCompletion({
+      messages: [],
+      max_tokens: 700,
+      temperature: 0.3,
+      tools: [{ type: "function", function: { name: "get_invitation", parameters: {} } }],
+    });
     const body = JSON.parse(seen.init.body);
-    assert.equal(body.max_output_tokens, 700);
-    assert.equal(body.store, false);
+    assert.equal(body.max_tokens, 700);
+    assert.equal(body.temperature, 0.3);
+    assert.equal(body.tools[0].function.name, "get_invitation");
   });
   it("rejects with AI provider HTTP on non-OK response", async () => {
     process.env.LLM_API_KEY = "test-key";
     globalThis.fetch = async () => ({ ok: false, status: 500, json: async () => ({}) });
-    await assert.rejects(() => postResponses({ instructions: "sys", input: [] }), /AI provider HTTP/);
+    await assert.rejects(() => chatCompletion({ messages: [] }), /AI provider HTTP/);
   });
   it("rejects when no key is configured", async () => {
     delete process.env.LLM_API_KEY;
     delete process.env.OPENAI_API_KEY;
-    await assert.rejects(() => postResponses({ instructions: "sys", input: [] }), /not configured/);
+    await assert.rejects(() => chatCompletion({ messages: [] }), /not configured/);
+  });
+  it("flattens string and content-part assistant text", () => {
+    assert.equal(messageText("hello"), "hello");
+    assert.equal(messageText([{ text: "a" }, { text: "b" }]), "ab");
+    assert.equal(messageText(null), "");
   });
 });
 

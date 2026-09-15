@@ -5,11 +5,19 @@ import type { NewWhatsappSession } from "@/lib/db/schema";
 // above are type-only and erased, so plain `node --test` loads this
 // module fine). Single source of truth shared by ./session (DB layer)
 // and ./handler (chat logic).
+export type PendingAction = {
+  kind: "create_ticket";
+  category: string;
+  description: string;
+};
+
 export type SessionPayload = {
   admission?: string;
   name?: string;
   className?: string;
   history?: Array<{ role: "user" | "assistant"; content: string }>;
+  // An action the agent proposed and the family has not yet confirmed.
+  pending?: PendingAction;
 };
 
 // Append one turn, cap history at the last 8 messages (matches answerQuestion's window).

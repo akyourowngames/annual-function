@@ -1,6 +1,6 @@
 import type { answerQuestion } from "@/lib/server/helpdesk";
 import type { recoverInvitation } from "@/lib/server/invitation-recovery";
-import type { getGuestUsage } from "@/lib/db/queries";
+import type { getGuestUsage, createTicketForCode } from "@/lib/db/queries";
 import { menuText, nextMenuStep, type Inbound, type WaStep } from "./menu.ts";
 import { pushHistory, newSession, type SessionPayload } from "./history.ts";
 import { buildInvitationPdf } from "./pass.ts";
@@ -15,6 +15,8 @@ export type HandlerDeps = {
   recover: typeof recoverInvitation;
   answer: typeof answerQuestion;
   usage: typeof getGuestUsage;
+  createTicket: typeof createTicketForCode;
+  recordContact?: (key: string, code: string) => Promise<void>;
 };
 
 // NOTE on imports: the brain/DB modules (and ./session, which pulls
@@ -40,14 +42,27 @@ export const liveDeps: HandlerDeps = {
   answer: (...args: Parameters<typeof answerQuestion>) =>
     import("../helpdesk").then((m) => m.answerQuestion(...args)),
   usage: (code: string) => import("../../db/queries").then((m) => m.getGuestUsage(code)),
+  createTicket: (input) =>
+    import("../../db/queries").then((m) => m.createTicketForCode(input)),
+  recordContact: (key, code) =>
+    import("../delivery").then((m) => m.recordContact(key, code)),
 };
 
 const PORTAL_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://annual-five.vercel.app";
 
 function payloadOf(raw: unknown): SessionPayload {
   const p = (raw ?? {}) as SessionPayload;
-  return { admission: p.admission, name: p.name, className: p.className, history: p.history };
+  return {
+    admission: p.admission,
+    name: p.name,
+    className: p.className,
+    history: p.history,
+    pending: p.pending,
+  };
 }
+
+const YES = /^(yes+|y|ya|yeah|yep|haan?|ha|ok(ay)?|sure|confirm|theek|thik|kar ?do)\b/i;
+const NO = /^(no+|n|nahi?|nah|cancel|stop|mat)\b/i;
 
 export async function handleInbound(inbound: Inbound, deps: HandlerDeps): Promise<void> {
   const { waId } = inbound;
@@ -73,6 +88,40 @@ export async function handleInbound(inbound: Inbound, deps: HandlerDeps): Promis
 
   // Menu routing on every message (buttons "invite"/"faq", numbers, keywords).
   const route = nextMenuStep(step, inbound.text, inbound.buttonId);
+
+  // A proposed ticket the family is confirming (or declining).
+  if (payload.pending) {
+    const pending = payload.pending;
+    const answer = (inbound.text || inbound.buttonId || "").trim();
+    if (YES.test(answer)) {
+      payload = { history: payload.history };
+      step = "idle";
+      try {
+        const ticket = await deps.createTicket({
+          code: priorCode,
+          category: pending.category,
+          description: pending.description,
+        });
+        await say(
+          `Done! Aapka request event team ke paas bhej diya. Ticket reference: ${ticket.id
+            .slice(0, 8)
+            .toUpperCase()} (status: ${ticket.status}).`,
+        );
+      } catch (e) {
+        console.error("whatsapp ticket failed", waId, e);
+        await say(
+          "Ticket banaane me dikkat aayi. Please portal ke Support se dobara bhejein.",
+        );
+      }
+      return;
+    }
+    if (NO.test(answer)) {
+      payload = { history: payload.history };
+      step = "idle";
+      await say("Theek hai, cancel kar diya. Aur kuch poochna chahenge?");
+      return;
+    }
+  }
   if (route.step === "idle" && step !== "idle" && !route.value) {
     step = "idle";
     payload = { history: payload.history };
@@ -117,6 +166,13 @@ export async function handleInbound(inbound: Inbound, deps: HandlerDeps): Promis
     if ("recoveredCode" in result && typeof result.recoveredCode === "string") {
       const code = result.recoveredCode;
       verifiedCode = code;
+      if (deps.recordContact) {
+        try {
+          await deps.recordContact(`wa:${waId}`, code);
+        } catch (e) {
+          console.error("contact capture failed", waId, e);
+        }
+      }
       try {
         const u = await deps.usage(code);
         const pdf = await buildInvitationPdf({
@@ -155,6 +211,21 @@ export async function handleInbound(inbound: Inbound, deps: HandlerDeps): Promis
     return;
   }
   if ("action" in res && res.action) {
+    if (res.action.kind === "create_ticket") {
+      payload = {
+        ...payload,
+        pending: {
+          kind: "create_ticket",
+          category: res.action.category,
+          description: res.action.description,
+        },
+      };
+      step = "idle";
+      await say(
+        `Main ye request event team ko bhej sakta hoon:\n“${res.action.description}”\n\nConfirm karne ke liye *yes* likhein, cancel ke liye *no*.`,
+      );
+      return;
+    }
     await say(`Ye kaam portal se hoga (${PORTAL_URL}/portal). Chat me main sirf invitation aur jaankari de sakta hun. Kya poochna chahenge?`);
     return;
   }

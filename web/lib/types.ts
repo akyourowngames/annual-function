@@ -26,6 +26,11 @@ export type InvitationData = {
   remaining: number;
   checkIns: number;
   guests: GuestInfo[];
+  rsvp?: {
+    status: string;
+    guests: number | null;
+    note: string | null;
+  } | null;
 };
 export type TicketInfo = {
   id: string;
@@ -40,10 +45,14 @@ export type TicketInfo = {
   };
 };
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const isForm =
+    typeof FormData !== "undefined" && init?.body instanceof FormData;
   const res = await fetch(path, {
     ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
-    signal: init?.signal ?? AbortSignal.timeout(25000),
+    headers: isForm
+      ? { ...init?.headers }
+      : { "Content-Type": "application/json", ...init?.headers },
+    signal: init?.signal ?? AbortSignal.timeout(isForm ? 60000 : 25000),
   });
   const data = await res.json().catch(() => ({
     error: "The server could not complete this request. Please try again.",

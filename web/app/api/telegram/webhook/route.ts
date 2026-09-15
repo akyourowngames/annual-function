@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { handleTelegramInbound, liveDeps, parseTelegramUpdate } from "@/lib/server/telegram/handler";
 import { sendDocument, sendMessage } from "@/lib/server/telegram/client";
 
+// Agent calls (vision: none) can take several seconds; give the function room.
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
   // Fail closed: when TELEGRAM_WEBHOOK_SECRET is set (production MUST set
   // it — see .env.example), the request must carry the matching
