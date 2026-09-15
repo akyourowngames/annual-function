@@ -113,9 +113,10 @@ annual-function/
 - [x] AI helpdesk with verified invitation recovery
 - [x] Real roster import: 467 students, 12 classes, zero demo data
 - [x] Playful landing page, editable by staff
-- [ ] WhatsApp / Telegram delivery
-- [ ] Vector search for the knowledge base
-- [ ] Live attendance wall
+- [x] Telegram agent live; WhatsApp webhook built (awaiting Meta templates)
+- [x] Semantic knowledge base: staff PDF/doc upload + NVIDIA embeddings on pgvector
+- [x] RSVP & expected headcount, announcements/reminders, bulk pass delivery
+- [x] Live attendance wall with per-gate and per-class counts
 
 ---
 
