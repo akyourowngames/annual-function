@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { answerQuestion } from "@/lib/server/helpdesk";
+import { hasLlmKey } from "@/lib/server/llm-client";
 import { body, fail, HttpError, sameOrigin, text } from "@/lib/server/http";
 import { recoverInvitation } from "@/lib/server/invitation-recovery";
 import { parseRecoveryMessage } from "@/lib/invitations/identity";
 const requests = new Map<string, { count: number; until: number }>();
+export const maxDuration = 60;
 export async function GET() {
   return NextResponse.json({
     ok: true,
-    mode: process.env.OPENAI_API_KEY ? "ai" : "official_information",
+    mode: hasLlmKey() ? "ai" : "official_information",
   });
 }
 export async function POST(request: Request) {

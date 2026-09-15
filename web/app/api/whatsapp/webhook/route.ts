@@ -8,6 +8,9 @@ import {
   verifySignature,
 } from "@/lib/server/whatsapp/client";
 
+// Agent calls can take several seconds; give the function room.
+export const maxDuration = 60;
+
 // Meta verification: GET with hub.mode=subscribe, hub.challenge,
 // hub.verify_token == WHATSAPP_VERIFY_TOKEN.
 export async function GET(req: Request) {

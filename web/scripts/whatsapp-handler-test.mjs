@@ -28,6 +28,7 @@ function fakeDeps(overrides = {}) {
       registered: 0,
       remaining: 2,
     }),
+    createTicket: async () => ({ id: "abcdef12-9999-9999-9999-999999999999", status: "pending" }),
     ...overrides,
   };
 }
@@ -87,6 +88,45 @@ describe("whatsapp handler", () => {
     await handleInbound(inbound("2"), d);
     await handleInbound(inbound("guest add karo"), d);
     assert.match(d.sent.at(-1).body, /portal/i);
+  });
+  it("proposes a ticket, then creates it only after the family confirms", async () => {
+    let created = null;
+    const d = fakeDeps({
+      answer: async () => ({
+        reply: "x",
+        action: { kind: "create_ticket", category: "venue", description: "Wrong venue shown" },
+      }),
+      createTicket: async (input) => {
+        created = input;
+        return { id: "abcdef12-9999-9999-9999-999999999999", status: "pending" };
+      },
+    });
+    await handleInbound(inbound("2"), d);
+    await handleInbound(inbound("ye galat hai, ticket banao"), d);
+    assert.match(d.sent.at(-1).body, /yes/i);
+    assert.equal(created, null, "must not create before confirmation");
+    await handleInbound(inbound("yes"), d);
+    assert.ok(created, "expected the ticket to be created after confirmation");
+    assert.equal(created.description, "Wrong venue shown");
+    assert.match(d.sent.at(-1).body, /ABCDEF12/);
+  });
+  it("declining a proposed ticket cancels it and creates nothing", async () => {
+    let created = null;
+    const d = fakeDeps({
+      answer: async () => ({
+        reply: "x",
+        action: { kind: "create_ticket", category: "venue", description: "Wrong venue shown" },
+      }),
+      createTicket: async (input) => {
+        created = input;
+        return { id: "abcdef12-9999-9999-9999-999999999999", status: "pending" };
+      },
+    });
+    await handleInbound(inbound("2"), d);
+    await handleInbound(inbound("ticket banao"), d);
+    await handleInbound(inbound("no"), d);
+    assert.equal(created, null);
+    assert.match(d.sent.at(-1).body, /cancel/i);
   });
   it("stored history contains both user and assistant turns after an FAQ exchange", async () => {
     const d = fakeDeps();

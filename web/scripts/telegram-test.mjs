@@ -27,6 +27,7 @@ function fakeDeps(overrides = {}) {
       registered: 0,
       remaining: 2,
     }),
+    createTicket: async () => ({ id: "abcdef12-9999-9999-9999-999999999999", status: "pending" }),
     ...overrides,
   };
 }
@@ -62,19 +63,74 @@ describe("telegram handler", () => {
     assert.ok(stored, "expected a session to be stored");
     assert.equal(stored.invitationCode, "ABC-123");
   });
-  it("FAQ path answers from docs via the tg clientKey", async () => {
+  it("FAQ path answers free text from the agent via the tg clientKey", async () => {
     let seenKey = null;
+    let seenMessage = null;
     const d = fakeDeps({
       answer: async (message, code, history, clientKey) => {
         seenKey = clientKey;
-        assert.match(message, /shuru/);
+        seenMessage = message;
         return { reply: "Karyakram shaam 5 baje shuru hoga.", action: null };
       },
     });
-    await handleTelegramInbound(inbound("2"), d);
     await handleTelegramInbound(inbound("Program kab shuru hoga?"), d);
     assert.equal(seenKey, "tg:424242");
+    assert.match(seenMessage, /shuru/);
     assert.match(d.sent.at(-1).text, /5 baje/);
+  });
+  it("routes a greeting straight to the agent, not a canned menu", async () => {
+    let answered = 0;
+    const d = fakeDeps({
+      answer: async () => {
+        answered++;
+        return { reply: "Namaste! Main aapki kaise madad karun?", action: null };
+      },
+    });
+    await handleTelegramInbound(inbound("hi"), d);
+    assert.equal(answered, 1);
+    assert.equal(d.sent.length, 1);
+    assert.doesNotMatch(d.sent[0].text, /Reply 1 ya 2/);
+  });
+  it("still shows the menu when explicitly asked", async () => {
+    const d = fakeDeps();
+    await handleTelegramInbound(inbound("menu"), d);
+    assert.match(d.sent[0].text, /1\. Get my invitation/);
+  });
+  it("proposes a ticket, then creates it only after the family confirms", async () => {
+    let created = null;
+    const d = fakeDeps({
+      answer: async () => ({
+        reply: "x",
+        action: { kind: "create_ticket", category: "venue", description: "Wrong venue shown" },
+      }),
+      createTicket: async (input) => {
+        created = input;
+        return { id: "abcdef12-9999-9999-9999-999999999999", status: "pending" };
+      },
+    });
+    await handleTelegramInbound(inbound("raise a ticket for the wrong venue"), d);
+    assert.match(d.sent.at(-1).text, /yes/i);
+    assert.equal(created, null, "must not create before confirmation");
+    await handleTelegramInbound(inbound("yes"), d);
+    assert.ok(created, "expected the ticket to be created after confirmation");
+    assert.match(d.sent.at(-1).text, /ABCDEF12/);
+  });
+  it("declining a proposed ticket creates nothing", async () => {
+    let created = null;
+    const d = fakeDeps({
+      answer: async () => ({
+        reply: "x",
+        action: { kind: "create_ticket", category: "venue", description: "Wrong venue shown" },
+      }),
+      createTicket: async (input) => {
+        created = input;
+        return { id: "abcdef12-9999-9999-9999-999999999999", status: "pending" };
+      },
+    });
+    await handleTelegramInbound(inbound("ticket banao"), d);
+    await handleTelegramInbound(inbound("no"), d);
+    assert.equal(created, null);
+    assert.match(d.sent.at(-1).text, /cancel/i);
   });
   it("media failure still stores the code and sends the portal link", async () => {
     const d = fakeDeps({
