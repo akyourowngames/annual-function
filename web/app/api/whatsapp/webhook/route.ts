@@ -2,11 +2,14 @@ import { NextResponse } from "next/server";
 import { handleInbound, liveDeps } from "@/lib/server/whatsapp/handler";
 import { parseWebhookBody } from "@/lib/server/whatsapp/menu";
 import {
+  downloadMedia,
   sendDocument,
   sendTextWithTemplateFallback,
   uploadMedia,
   verifySignature,
 } from "@/lib/server/whatsapp/client";
+import { loadSession } from "@/lib/server/whatsapp/session";
+import { saveIncomingPhoto } from "@/lib/server/album";
 
 // Agent calls can take several seconds; give the function room.
 export const maxDuration = 60;
@@ -40,6 +43,25 @@ export async function POST(req: Request) {
   // non-2xx, so a poison message must not wedge the whole batch.
   for (const inbound of parseWebhookBody(body)) {
     try {
+      if (inbound.media) {
+        const { bytes, mime } = await downloadMedia(inbound.media.id);
+        const session = await loadSession(`wa:${inbound.waId}`);
+        const saved = await saveIncomingPhoto({
+          channel: "whatsapp",
+          address: inbound.waId,
+          code: session?.invitationCode ?? null,
+          buffer: Buffer.from(bytes),
+          mime,
+          caption: inbound.media.caption,
+        });
+        await sendTextWithTemplateFallback(
+          inbound.waId,
+          saved
+            ? "Thank you! Your photo has been added to the school's Annual Function album."
+            : "We couldn't save that photo right now. Please try again in a moment.",
+        );
+        continue;
+      }
       await handleInbound(inbound, {
         ...liveDeps,
         sendText: (to, text) => sendTextWithTemplateFallback(to, text),

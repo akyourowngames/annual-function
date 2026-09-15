@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import {
   checkInByQrToken,
   countCheckIns,
@@ -6,7 +6,7 @@ import {
   listGuests,
   studentForCode,
 } from "@/lib/db/queries";
-import { requireStaff } from "@/lib/server/auth";
+import { requireCheckIn } from "@/lib/server/auth";
 import {
   body,
   fail,
@@ -17,7 +17,7 @@ import {
 } from "@/lib/server/http";
 export async function GET(request: NextRequest) {
   try {
-    await requireStaff();
+    await requireCheckIn();
     const token = text(
       request.nextUrl.searchParams.get("qrToken"),
       "QR token",
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
   try {
     sameOrigin(request);
-    const staff = await requireStaff();
+    const staff = await requireCheckIn();
     const b = await body(request);
     const result = await checkInByQrToken({
       qrToken: text(b.qrToken, "QR token", 100),

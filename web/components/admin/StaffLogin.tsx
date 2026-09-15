@@ -108,13 +108,13 @@ export default function StaffLogin({ onLogin }: { onLogin: () => void }) {
                 </>
               ) : (
                 <label className="field">
-                  <span>Staff access key</span>
+                  <span>Access key</span>
                   <input
                     type="password"
                     name="accessKey"
                     required
                     autoComplete="current-password"
-                    placeholder="Enter your administrator key"
+                    placeholder="Staff or gate keeper key"
                   />
                 </label>
               )}
@@ -130,7 +130,8 @@ export default function StaffLogin({ onLogin }: { onLogin: () => void }) {
             </form>
             <p className="security-note">
               <Icon name="shield" size={15} />
-              For authorized school and event staff.
+              For authorized school and event staff. Gate keepers sign in at{" "}
+              <Link href="/gate">/gate</Link>.
             </p>
             <Link href="/portal" className="staff-link">
               Return to the student portal

@@ -30,6 +30,8 @@ jobs:
           scripts/markdown-test.mjs
           scripts/channels-test.mjs
           scripts/escalation-test.mjs
+          scripts/photo-test.mjs
+          scripts/roles-test.mjs
           scripts/knowledge-test.mjs
           scripts/whatsapp-test.mjs
           scripts/telegram-test.mjs

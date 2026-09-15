@@ -20,9 +20,13 @@ The normal preview is http://localhost:3000. If another development server is us
 
 ## Staff access
 
-Staff can sign in using Supabase email/password accounts with `app_metadata.role` set to `admin` or `staff` by a trusted administrator. User-editable metadata does not grant access. Administrators may alternatively configure a long, random `ADMIN_ACCESS_KEY` for the access-key login. No default password or access key is shipped.
+Staff sign in with Supabase email/password accounts whose `app_metadata.role` is `admin`, `staff` or `gate` (set by a trusted administrator — user-editable metadata never grants access). Alternatively configure long, random `ADMIN_ACCESS_KEY` and `GATE_ACCESS_KEY` values for key login. No default keys ship with the repo.
 
-Staff sessions use HttpOnly cookies. Publishing official event information, editing the landing page, managing invitations and changing guest allowances require the administrator role. Gate check-in and ticket handling require an authorized staff session.
+- **admin** — everything: invitations, guests, check-in, tickets, outreach, album, plus publishing official information, the landing page and the public gallery.
+- **staff** — day-to-day operations: invitations, guests, gate check-in, ticket replies, announcements/reminders and album moderation.
+- **gate** — gate keepers: the QR scanner only. They sign in at **`/gate`** (or the staff login) with the gate key, get a single scanner screen, can verify a pass and check guests in (`/api/check-in`); every other staff endpoint answers 403.
+
+Sessions are HttpOnly cookies that carry the role. Publishing official event information, editing the landing page, changing guest allowances and publishing the public gallery require the administrator role.
 
 ## Editing the landing page
 
@@ -64,6 +68,16 @@ The older `scripts/e2e-test.mjs` is not the npm test entry point; it predates is
 Delivery needs a family's messaging endpoint, captured automatically the first time they verify their invitation in chat (`invitation_contacts`). Families who have never messaged the bot are reported as *not reachable* — that is a Telegram/WhatsApp platform rule, not a limitation of this system; share the bot link to bring them in.
 
 Scheduled announcements are drained by `GET /api/cron`, authorized by either `CRON_SECRET` (Vercel Cron, defined in `web/vercel.json`) or an admin session. The Live dashboard also triggers it on every poll, so reminders fire on time during the event window even on plans with daily-only crons.
+
+## Event album (family photos)
+
+Professional photographers miss the candid moments. Families can send their own photos to the bot; each one is stored in a **private Supabase Storage bucket** (`ALBUM_BUCKET`, default `album`) and recorded in `photos` with status `pending`. Staff review them in **Staff workspace → Album** — approve, hide or delete (deleting removes the stored file too). Photos are never public: the workspace renders them through short-lived signed URLs, and nothing is shown anywhere else until a human approves it.
+
+Requires `SUPABASE_SERVICE_ROLE_KEY` (server-only) in the environment; the bucket is created automatically on first upload. Telegram photos are live today (compressed, well inside the 20 MB bot download limit) — the bot accepts `message.photo` and image `message.document`, stores the photo, and replies with a confirmation. Non-image documents and other media are acknowledged and ignored. WhatsApp image ingest uses the same path but stays dark until the Meta phone number and token are configured.
+
+## Public photo gallery (`/gallery`)
+
+`/gallery` is a standalone public page — no login, linked from the landing footer and from the **Photo album** link in the student portal sidebar. It renders only when staff publish it (**Staff workspace → Gallery → Publish gallery**, stored as `event_settings.gallery_enabled`, off by default). Even then it shows **approved photos only**, served as short-lived signed URLs from the private bucket; pending and hidden photos are never exposed. Unpublishing takes the page dark within a refresh (visitors see "the album isn't open yet"). Moderating (approve/hide/delete) requires staff; publishing requires an administrator.
 
 ## Continuous integration
 

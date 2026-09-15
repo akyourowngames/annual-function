@@ -1,8 +1,14 @@
 export type WaStep = "idle" | "await_admission" | "await_name" | "await_class" | "faq";
-export type Inbound = { waId: string; text: string; buttonId?: string };
+export type Inbound = {
+  waId: string;
+  text: string;
+  buttonId?: string;
+  media?: { id: string; mime: string; caption: string };
+};
 
 // Walk a Meta webhook payload, return one inbound per incoming user message.
-// Skips statuses, non-text types (image/audio/...), and malformed entries.
+// Skips statuses, non-text/non-image types (audio/video/...), and malformed
+// entries.
 export function parseWebhookBody(body: unknown): Inbound[] {
   const out: Inbound[] = [];
   const entries = (body as { entry?: Array<{ changes?: Array<{ value?: { messages?: unknown[] } }> }> })?.entry;
@@ -14,13 +20,29 @@ export function parseWebhookBody(body: unknown): Inbound[] {
       const messages = (change as { value?: { messages?: unknown } })?.value?.messages;
       if (!Array.isArray(messages)) continue;
       for (const m of messages) {
-        const msg = m as { from?: string; type?: string; text?: { body?: string }; interactive?: { button_reply?: { id?: string }; list_reply?: { id?: string } } };
+        const msg = m as {
+          from?: string;
+          type?: string;
+          text?: { body?: string };
+          image?: { id?: string; mime_type?: string; caption?: string };
+          interactive?: { button_reply?: { id?: string }; list_reply?: { id?: string } };
+        };
         if (typeof msg?.from !== "string") continue;
         if (msg.type === "text" && typeof msg.text?.body === "string") {
           out.push({ waId: msg.from, text: msg.text.body.trim() });
         } else if (msg.type === "interactive") {
           const id = msg.interactive?.button_reply?.id ?? msg.interactive?.list_reply?.id;
           if (id) out.push({ waId: msg.from, text: "", buttonId: id });
+        } else if (msg.type === "image" && typeof msg.image?.id === "string") {
+          out.push({
+            waId: msg.from,
+            text: "",
+            media: {
+              id: msg.image.id,
+              mime: msg.image.mime_type || "image/jpeg",
+              caption: msg.image.caption || "",
+            },
+          });
         }
       }
     }

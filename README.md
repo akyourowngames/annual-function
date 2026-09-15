@@ -119,6 +119,9 @@ annual-function/
 - [x] Live attendance wall with per-gate and per-class counts
 - [x] Real Everest Public School profile (logo, contact, leaders, Principal's note)
 - [x] Smarter escalation: staff summary + a one-tap reply drafted for every request
+- [x] Candid event album: families send photos to the bot, staff review in the workspace
+- [x] Public `/gallery` page staff can publish or hide, showing approved photos only
+- [x] Gate keeper role: a scanner-only key for the door team
 
 ---
 

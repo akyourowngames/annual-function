@@ -35,6 +35,7 @@ const paths: Record<string, string> = {
   menu: "M4 6h16M4 12h16M4 18h16",
   megaphone: "M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1z M15 8a5 5 0 0 1 0 8",
   pulse: "M3 12h4l2-6 4 12 2-6h6",
+  camera: "M4 8h3l2-3h6l2 3h3v11H4z M12 16.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7",
 };
 export default function Icon({
   name,
