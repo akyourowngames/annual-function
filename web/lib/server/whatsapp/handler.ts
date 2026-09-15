@@ -71,6 +71,14 @@ export async function handleInbound(inbound: Inbound, deps: HandlerDeps): Promis
   let step = (base.step ?? "idle") as WaStep;
   let payload = payloadOf(base.payload);
   const priorCode = ("invitationCode" in base ? base.invitationCode : null) ?? undefined;
+  // Keep the family's reachable endpoint fresh on every message once verified.
+  if (deps.recordContact && priorCode) {
+    try {
+      await deps.recordContact(`wa:${waId}`, priorCode);
+    } catch (e) {
+      console.error("contact capture failed", waId, e);
+    }
+  }
   // Once verified mid-turn, every later persist must carry the code:
   // persist() rebuilds from the stale `base` closure, so a trailing
   // persist({}) (e.g. inside say()) would otherwise wipe a just-stored code.

@@ -45,6 +45,7 @@ export default function Outreach({ classes }: { classes: string[] }) {
   const [audience, setAudience] = useState("all");
   const [resend, setResend] = useState(false);
   const [counts, setCounts] = useState<Counts | null>(null);
+  const [reachTick, setReachTick] = useState(0);
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState({ sent: 0, failed: 0 });
 
@@ -88,7 +89,13 @@ export default function Outreach({ classes }: { classes: string[] }) {
     return () => {
       alive = false;
     };
-  }, [tab, audience]);
+  }, [tab, audience, reachTick]);
+  // Keep the reachability count live while the tab is open.
+  useEffect(() => {
+    if (tab !== "invites") return;
+    const t = setInterval(() => setReachTick((v) => v + 1), 15000);
+    return () => clearInterval(t);
+  }, [tab]);
   useEffect(() => {
     if (tab !== "announce") return;
     let alive = true;
@@ -270,9 +277,14 @@ export default function Outreach({ classes }: { classes: string[] }) {
               <small>{progress.failed} failed</small>
             </section>
           </div>
-          <button className="button primary space-top" disabled={sending || !counts?.reachable} onClick={sendInvites}>
-            {sending ? `Sending… ${progress.sent}` : `Send passes to ${counts?.reachable ?? 0} families`}
-          </button>
+          <div className="button-row space-top">
+            <button className="button primary" disabled={sending || !counts?.reachable} onClick={sendInvites}>
+              {sending ? `Sending… ${progress.sent}` : `Send passes to ${counts?.reachable ?? 0} families`}
+            </button>
+            <button className="button" disabled={sending} onClick={() => setReachTick((v) => v + 1)}>
+              Recheck
+            </button>
+          </div>
           <p className="caption space-top">
             Only families who have messaged the bot can receive chat messages —
             that&rsquo;s a platform rule, not a limitation of this system. To
