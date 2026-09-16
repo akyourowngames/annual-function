@@ -105,12 +105,18 @@ streams MP3 — measured **~12 ms to first byte**, so playback starts essentiall
 instantly. Pick a voice in the header (8 curated, Indian English first);
 `TTS_VOICE` sets the default.
 
-**In — the browser.** Speech recognition uses the Web Speech API, so the server
-carries no audio dependencies. Chrome or Edge, `en-IN`.
+**In — the browser records, Whisper hears.** The page uses `MediaRecorder` and
+posts the clip to `/api/transcribe`, where Groq's Whisper
+(`whisper-large-v3-turbo`, `STT_MODEL`) turns it into words with the same
+`GROQ_API_KEY` as the brain. No browser speech recognition: that exists in some
+browsers and not others, uploads elsewhere, and gives up without saying why.
+Whisper takes the browser's own webm/ogg/mp4 audio as it comes, so there is
+nothing to convert and no audio library on the page. The clip ends itself once
+you stop talking, which is what the loudness check is for.
 
-**Hands-free.** Flip the toggle and the mic stays open: it pauses while the
-assistant is speaking (so it never transcribes itself) and reopens the moment the
-answer finishes. Say "stop" or hit the mic to interrupt.
+**Hands-free.** Flip the toggle and the mic reopens the moment the answer
+finishes — never while it is speaking, so it cannot transcribe itself. Say
+"stop" or hit the mic to interrupt.
 
 > The microphone needs a secure context. `localhost` is fine. For phones on the
 > venue Wi-Fi, put it behind HTTPS — a `cloudflared`/`ngrok` tunnel is quickest —
@@ -120,5 +126,6 @@ answer finishes. Say "stop" or hit the mic to interrupt.
 
 - The database access here is read-only. Everything that writes goes through the
   app's APIs.
-- Groq also serves Whisper (STT) and Orpheus (TTS) on its free tier, if you ever
-  want speech handled server-side end to end.
+- The same Whisper path serves the family bots; do not reuse this key there, so
+  a busy function hall cannot exhaust the organizers' quota. Orpheus (TTS) is
+  available on the free tier too, if Edge TTS is ever not wanted.

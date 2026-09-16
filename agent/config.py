@@ -64,8 +64,13 @@ EMBED_API_KEY = _env("EMBED_API_KEY") or NVIDIA_API_KEY
 EMBED_MODEL = _env("EMBED_MODEL", "nvidia/nemotron-3-embed-1b")
 
 # --- voice --------------------------------------------------------------
-# Edge TTS (edge-tts) neural voices: free, no key, natural. The page streams
-# MP3 from /api/speak. Swap the voice, or pick another in the UI.
+# Speech in: the page records a clip and posts it to /api/transcribe, where
+# Groq Whisper turns it into words. Same key as the brain — one provider, one
+# quota. Whisper takes the browser's own webm/ogg/mp4 audio as-is.
+STT_MODEL = _env("STT_MODEL", "whisper-large-v3-turbo")
+
+# Speech out: Edge TTS (edge-tts) neural voices: free, no key, natural. The page
+# streams MP3 from /api/speak. Swap the voice, or pick another in the UI.
 TTS_VOICE = _env("TTS_VOICE", "en-IN-NeerjaExpressiveNeural")
 TTS_RATE = _env("TTS_RATE", "+8%")
 

@@ -9,13 +9,13 @@ import pathlib
 from contextlib import asynccontextmanager
 from typing import Any, Awaitable, Callable
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import config
-from assistant import actions, db, identity, llm, router, session as sessions, tools, tts
+from assistant import actions, db, identity, llm, router, session as sessions, stt, tools, tts
 from assistant.prompts import greeting, system_prompt
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
@@ -249,6 +249,8 @@ async def health() -> dict[str, Any]:
         "fallback": bool(config.FALLBACK_API_KEY),
         "models": [model for _, _, model in llm.chain()],
         "phrase_mode": config.PHRASE_MODE,
+        "hearing": stt.ready(),
+        "hearing_model": config.STT_MODEL if stt.ready() else "",
         "actions": bool(config.ADMIN_ACCESS_KEY),
         "identity": who,
     }
@@ -301,6 +303,23 @@ async def chat_stream(req: ChatRequest, _: bool = Depends(auth)) -> StreamingRes
 @app.get("/api/voices")
 async def list_voices(_: bool = Depends(auth)) -> dict[str, Any]:
     return {"voices": await tts.voices(), "default": config.TTS_VOICE}
+
+
+@app.post("/api/transcribe")
+async def transcribe(request: Request, _: bool = Depends(auth)) -> dict[str, Any]:
+    """Hear a clip the page recorded. The audio is the raw body, not a form.
+
+    Sending the bytes straight through keeps the browser free of any speech
+    library: it only has to record.
+    """
+    audio = await request.body()
+    if not audio:
+        raise HTTPException(status_code=400, detail="No audio")
+    try:
+        heard = await stt.transcribe(audio, request.headers.get("content-type", ""))
+    except stt.SttUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"text": heard}
 
 
 @app.get("/api/speak")
