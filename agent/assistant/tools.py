@@ -454,6 +454,31 @@ async def propose_remove_guest(args: dict, ctx: Ctx) -> dict:
     )
 
 
+async def propose_rename_guest(args: dict, ctx: Ctx) -> dict:
+    person, err = await _one_person(args)
+    if err:
+        return err
+    current = str(args.get("current_name") or "").strip()
+    new_name = str(args.get("new_name") or "").strip()
+    relationship = str(args.get("relationship") or "").strip()
+    if not current or not new_name:
+        return {"error": "Tell me which guest to change, and what the name should be."}
+    pending: dict[str, Any] = {
+        "kind": "rename_guest",
+        "code": person["code"],
+        "currentName": current,
+        "newName": new_name,
+    }
+    if relationship:
+        pending["relationship"] = relationship
+    tail = f" as {relationship}" if relationship else ""
+    return _propose(
+        ctx,
+        pending,
+        f"Rename {current} to {new_name}{tail} on {person['name']}'s invitation ({person['code']})",
+    )
+
+
 async def propose_check_in_by_name(args: dict, ctx: Ctx) -> dict:
     person, err = await _one_person(args)
     if err:
@@ -519,6 +544,16 @@ TOOL_SCHEMAS: list[dict] = [
     _tool("propose_set_invitation_status", "Propose disabling a pass, or re-enabling one.", {"query": {"type": "string"}, "active": {"type": "boolean"}}),
     _tool("propose_add_guest", "Propose adding a guest to a family's invitation. The database still enforces the guest limit.", {"query": {"type": "string"}, "guest_name": {"type": "string"}, "relationship": {"type": "string"}}),
     _tool("propose_remove_guest", "Propose removing a guest from a family's invitation.", {"query": {"type": "string"}, "guest_name": {"type": "string"}}),
+    _tool(
+        "propose_rename_guest",
+        "Propose changing a guest's name on a family's invitation — use this when the wrong person was registered, such as a parent entered as someone else. Give the name as it is now and what it should become.",
+        {
+            "query": {"type": "string"},
+            "current_name": {"type": "string"},
+            "new_name": {"type": "string"},
+            "relationship": {"type": "string"},
+        },
+    ),
     _tool("propose_check_in_by_name", "Propose checking in a family found by name, admission number or class.", {"query": {"type": "string"}}),
     _tool("propose_resend_pass", "Propose re-sending a family's invitation pass to their chat.", {"query": {"type": "string"}}),
 ]
@@ -548,6 +583,7 @@ HANDLERS: dict[str, Handler] = {
     "propose_set_invitation_status": propose_set_invitation_status,
     "propose_add_guest": propose_add_guest,
     "propose_remove_guest": propose_remove_guest,
+    "propose_rename_guest": propose_rename_guest,
     "propose_check_in_by_name": propose_check_in_by_name,
     "propose_resend_pass": propose_resend_pass,
 }
@@ -579,6 +615,7 @@ def label(name: str) -> str:
         "propose_set_invitation_status": "Preparing the pass change",
         "propose_add_guest": "Preparing the guest",
         "propose_remove_guest": "Preparing the removal",
+        "propose_rename_guest": "Correcting the name",
         "propose_check_in_by_name": "Finding the family",
         "propose_resend_pass": "Preparing the resend",
     }.get(name, name)

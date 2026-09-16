@@ -324,6 +324,43 @@ export async function removeGuest(code: string, guestId: string) {
     await tx.delete(guests).where(eq(guests.id, guestId));
   });
 }
+export async function updateGuest(
+  code: string,
+  guestId: string,
+  input: { name: string; relationship?: string },
+): Promise<Guest> {
+  return getDb().transaction(async (tx) => {
+    const [invitation] = await tx
+      .select()
+      .from(invitations)
+      .where(eq(invitations.invitationCode, code))
+      .limit(1)
+      .for("update");
+    if (!invitation) throw new Error("Invitation not found");
+    if (invitation.status !== "active")
+      throw new Error("Invitation is not active");
+    const [guest] = await tx
+      .select()
+      .from(guests)
+      .where(
+        and(eq(guests.id, guestId), eq(guests.invitationId, invitation.id)),
+      )
+      .limit(1);
+    if (!guest) throw new Error("Guest not found");
+    // Renaming is still allowed after check-in — the pass is in someone's hand
+    // and the correction has to reach it. Only the count is fixed at the gate.
+    const [updated] = await tx
+      .update(guests)
+      .set({
+        name: input.name,
+        relationship: input.relationship ?? guest.relationship,
+      })
+      .where(eq(guests.id, guestId))
+      .returning();
+    if (!updated) throw new Error("Failed to update guest");
+    return updated;
+  });
+}
 export async function studentForCode(code: string) {
   const [row] = await getDb()
     .select({ student: students })

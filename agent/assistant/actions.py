@@ -205,6 +205,38 @@ async def remove_guest(code: str, guest_name: str) -> dict[str, Any]:
     return {"code": code, "removed": guest.get("name")}
 
 
+async def rename_guest(
+    code: str, current_name: str, new_name: str, relationship: str | None = None
+) -> dict[str, Any]:
+    """Change a guest's name — how a parent registered as the wrong person is fixed.
+
+    The current guest is resolved against the invitation's own list, so a name
+    that matches nobody, or matches two people, is refused rather than guessed.
+    """
+    invitation = await _call("GET", f"/api/invitations?code={code}")
+    guests = invitation.get("guests") or []
+    wanted = (current_name or "").strip().lower()
+    matches = [g for g in guests if wanted and wanted in (g.get("name") or "").lower()]
+    if not matches:
+        raise RuntimeError(f"No guest called {current_name} is on {code}")
+    if len(matches) > 1:
+        raise RuntimeError(f"More than one guest on {code} matches {current_name}")
+    guest = matches[0]
+    payload: dict[str, Any] = {"code": code, "guestId": guest["id"], "name": new_name}
+    if relationship:
+        payload["relationship"] = relationship
+    res = await _call("PATCH", "/api/guests", payload)
+    changed = res.get("guest") or {}
+    return {
+        "code": code,
+        "was": guest.get("name"),
+        "name": changed.get("name") or new_name,
+        "relationship": changed.get("relationship"),
+        "registered": res.get("registered"),
+        "remaining": res.get("remaining"),
+    }
+
+
 async def resend_pass(code: str) -> dict[str, Any]:
     res = await _call("POST", "/api/admin/deliver", {"codes": [code]})
     result = res.get("result") or {}

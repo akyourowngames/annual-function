@@ -4,6 +4,7 @@ import {
   listGuests,
   registerGuest,
   removeGuest,
+  updateGuest,
 } from "@/lib/db/queries";
 import { body, fail, sameOrigin, text, uuid } from "@/lib/server/http";
 export async function GET(request: NextRequest) {
@@ -37,6 +38,32 @@ export async function POST(request: Request) {
       },
     );
     return NextResponse.json(result, { status: 201 });
+  } catch (e) {
+    return fail(e);
+  }
+}
+export async function PATCH(request: Request) {
+  try {
+    sameOrigin(request);
+    const b = await body(request);
+    const guest = await updateGuest(
+      text(b.code, "Invitation code", 64).toUpperCase(),
+      uuid(b.guestId),
+      {
+        name: text(b.name, "Guest name", 100),
+        relationship: b.relationship
+          ? text(b.relationship, "Relationship", 50, false)
+          : undefined,
+      },
+    );
+    const usage = await getGuestUsage(
+      text(b.code, "Invitation code", 64).toUpperCase(),
+    );
+    return NextResponse.json({
+      guest,
+      registered: usage.registered,
+      remaining: usage.remaining,
+    });
   } catch (e) {
     return fail(e);
   }

@@ -147,6 +147,18 @@ async def _execute_pending(pending: dict[str, Any]) -> str:
         if kind == "remove_guest":
             out = await actions.remove_guest(pending["code"], pending["guestName"])
             return f"Removed {out['removed']} from {out['code']}."
+        if kind == "rename_guest":
+            out = await actions.rename_guest(
+                pending["code"],
+                pending["currentName"],
+                pending["newName"],
+                pending.get("relationship"),
+            )
+            role = f" as {out['relationship']}" if out.get("relationship") else ""
+            return (
+                f"Changed {out['was']} to {out['name']}{role} on {out['code']}. "
+                f"{out.get('registered')} guests registered, {out.get('remaining')} seats left."
+            )
         if kind == "resend_pass":
             out = await actions.resend_pass(pending["code"])
             if out.get("sent"):
