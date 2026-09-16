@@ -151,8 +151,11 @@ async def unchecked_families(args: dict, _ctx: Ctx) -> dict:
         tuple(params) + (limit,),
     )
     return {
-        "families": rows,
-        "total": int(total or 0),
+        # The count first, and the list named as a sample: at a gate with 400
+        # families still out, the twelve names are a starting point, not the
+        # whole answer.
+        "total_still_to_arrive": int(total or 0),
+        "sample": rows,
         "class_name": class_name or None,
     }
 
@@ -172,17 +175,27 @@ async def rsvp_report(_args: dict, _ctx: Ctx) -> dict:
 
 
 async def class_breakdown(_args: dict, _ctx: Ctx) -> dict:
+    """Per-class headcount, biggest first.
+
+    Field names say what they are, because the phrasing model has to tell
+    students from the guests they are bringing without being told twice.
+    """
     rows = await db.rows(
         """
         select coalesce(s.class, 'Unassigned') as class_name,
-               count(*) as families,
-               count(*) filter (where i.rsvp_status = 'attending') as attending,
-               coalesce(sum(i.rsvp_guests) filter (where i.rsvp_status = 'attending'), 0) as expected
+               count(*) as students,
+               count(*) filter (where i.rsvp_status = 'attending') as coming,
+               coalesce(sum(i.rsvp_guests) filter (where i.rsvp_status = 'attending'), 0) as expected_guests
         from invitations i join students s on s.id = i.student_id
-        group by 1 order by expected desc
+        group by 1 order by students desc, class_name
         """
     )
-    return {"classes": rows}
+    total = sum(int(r["students"]) for r in rows)
+    return {
+        "classes": rows,
+        "class_count": len(rows),
+        "total_students": total,
+    }
 
 
 async def open_tickets(args: dict, _ctx: Ctx) -> dict:
@@ -490,7 +503,7 @@ TOOL_SCHEMAS: list[dict] = [
     _tool("checkin_status", "Arrivals: totals, per gate, and the most recent entries."),
     _tool("unchecked_families", "Active families with nobody checked in yet — who still has to arrive. Optionally for one class.", {"class_name": {"type": "string"}, "limit": {"type": "number"}}),
     _tool("rsvp_report", "RSVP totals: attending, declined, awaiting reply, and expected guest count."),
-    _tool("class_breakdown", "Per-class participation: families, attending, expected guests."),
+    _tool("class_breakdown", "Per-class headcount, biggest class first: students, how many are coming, and the guests they expect."),
     _tool("open_tickets", "Open support requests with their summaries.", {"limit": {"type": "number"}}),
     _tool("album_status", "Photo album: pending, approved, hidden, and whether the public gallery is published."),
     _tool("reachability", "How many families can be messaged on Telegram or WhatsApp."),

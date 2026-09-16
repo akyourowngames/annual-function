@@ -108,6 +108,11 @@ def _usable(message: dict[str, Any]) -> bool:
     return bool(message.get("tool_calls")) or bool((message.get("content") or "").strip())
 
 
+def was_cut_off(message: dict[str, Any]) -> bool:
+    """True when the model ran out of room mid-sentence."""
+    return message.get("_finish") == "length"
+
+
 def _clean(message: dict[str, Any]) -> dict[str, Any]:
     """Keep only what the next round needs — some gateways reject stray keys."""
     out: dict[str, Any] = {"role": "assistant", "content": message.get("content") or ""}
@@ -136,8 +141,13 @@ async def complete(
                 last = RuntimeError(f"{model}: HTTP {res.status_code}")
                 print(f"[backstage] {model} -> HTTP {res.status_code} {res.text[:120]}")
                 continue
-            message = (res.json().get("choices") or [{}])[0].get("message") or {}
+            choice = (res.json().get("choices") or [{}])[0]
+            message = choice.get("message") or {}
             if _usable(message):
+                # "length" means the model was cut off mid-sentence — the caller
+                # can tell, instead of showing the organizer half an answer.
+                if choice.get("finish_reason"):
+                    message["_finish"] = choice["finish_reason"]
                 return message, model
             last = RuntimeError(f"{model}: empty response")
             print(f"[backstage] {model} -> empty response")

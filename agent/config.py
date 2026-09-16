@@ -79,10 +79,13 @@ HOST = _env("AGENT_HOST", "127.0.0.1")
 PORT = int(_env("AGENT_PORT", "8000"))
 
 # --- latency knobs ------------------------------------------------------
-ANSWER_TOKENS = int(_env("ANSWER_TOKENS", "320"))
+ANSWER_TOKENS = int(_env("ANSWER_TOKENS", "700"))
 TOOL_ROUNDS = int(_env("TOOL_ROUNDS", "3"))
 CACHE_TTL = float(_env("CACHE_TTL", "4"))
 MODEL_TIMEOUT = float(_env("MODEL_TIMEOUT", "45"))
+# How long an answer may get before /api/speak trims it. Generous on purpose:
+# an organizer asking for the class breakdown should hear all of it.
+MAX_SPOKEN_CHARS = int(_env("MAX_SPOKEN_CHARS", "3000"))
 # How the fast path words a fetched answer: "model" (natural, ~0.4s) or
 # "template" (instant, mechanical, offline-safe).
 PHRASE_MODE = _env("PHRASE_MODE", "model")

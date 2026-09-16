@@ -207,16 +207,20 @@ async def run_turn(session_id: str, message: str, emit: Emit) -> dict[str, Any]:
     used: list[str] = []
     model = ""
     text = ""
+    cut_off = False
 
     for _round in range(config.TOOL_ROUNDS):
         try:
-            msg, model = await llm.complete(messages, tools=tools.TOOL_SCHEMAS, max_tokens=500)
+            msg, model = await llm.complete(
+                messages, tools=tools.TOOL_SCHEMAS, max_tokens=config.ANSWER_TOKENS
+            )
         except Exception as exc:  # noqa: BLE001
             text = f"My brain is not reachable right now ({type(exc).__name__})."
             break
         calls = msg.get("tool_calls") or []
         if not calls:
             text = (msg.get("content") or "").strip()
+            cut_off = llm.was_cut_off(msg)
             break
         messages.append(llm._clean(msg))
         picked = calls[:4]
@@ -225,6 +229,17 @@ async def run_turn(session_id: str, message: str, emit: Emit) -> dict[str, Any]:
         used.extend((c.get("function") or {}).get("name") or "tool" for c in picked)
     else:
         text = "That needed too many steps — ask me for one thing at a time."
+
+    if cut_off and text:
+        # It ran out of room mid-sentence. Ask once more with headroom rather
+        # than trailing off in the organizer's ear.
+        try:
+            whole, model = await llm.complete(messages, max_tokens=config.ANSWER_TOKENS * 2)
+            fuller = (whole.get("content") or "").strip()
+            if fuller and not llm.was_cut_off(whole):
+                text = fuller
+        except Exception as exc:  # noqa: BLE001
+            print(f"[backstage] could not finish the answer: {exc}")
 
     if not text:
         text = "I could not put that into words. Try asking again."
@@ -329,7 +344,12 @@ async def speak(
     _: bool = Depends(auth_flexible),
 ) -> StreamingResponse:
     """Stream natural speech as MP3. Point an <audio> element straight at it."""
-    spoken = (text or "").strip()[:1200]
+    # Generous, because a real answer can now be a full class list. Long enough
+    # that this should never fire; if it does, cut on a word rather than leaving
+    # a chopped word in the organizer's ear.
+    spoken = (text or "").strip()
+    if len(spoken) > config.MAX_SPOKEN_CHARS:
+        spoken = spoken[: config.MAX_SPOKEN_CHARS].rsplit(" ", 1)[0].rstrip(" ,;:")
     if not spoken:
         raise HTTPException(status_code=400, detail="Nothing to say")
     return StreamingResponse(

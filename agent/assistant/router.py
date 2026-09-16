@@ -51,7 +51,14 @@ INTENTS: list[tuple[str, str, str | None]] = [
         r"(?:find|look ?up|search|who is|where is|dhoondo|dhundo|dikhao)\s+(.+)",
         "query",
     ),
-    ("list_guests", r"(?:guests? (?:of|on|for)|guest list)\s+([A-Za-z]{2,}-?[A-Za-z0-9]+)", "code"),
+    (
+        "list_guests",
+        # Skip filler ("guest list for X"), then take something that actually
+        # looks like a code — a hyphenated one, or a long unbroken token. Taking
+        # the next word blindly used to capture "for" as the code.
+        r"(?:guest list|guests? (?:of|on|for))\b.*?\b([A-Za-z]{2,6}-[A-Za-z0-9]{3,}|[A-Za-z0-9]{7,})",
+        "code",
+    ),
 ]
 
 
@@ -72,10 +79,18 @@ _REASONING_MARKERS = re.compile(
     re.I,
 )
 
+# Long enough for a real list ("...twelve classes, 467 students in all: ..."),
+# short enough that a runaway paragraph is still caught.
+MAX_PHRASED_CHARS = 900
+
+# Room for a full list. A reasoning model spends part of this budget thinking
+# before it writes anything, which is what used to chop a class list in half.
+PHRASE_TOKENS = 600
+
 
 def _looks_spoken(text: str) -> bool:
     stripped = text.strip()
-    if len(stripped) < 15 or len(stripped) > 400:
+    if len(stripped) < 15 or len(stripped) > MAX_PHRASED_CHARS:
         return False
     if re.fullmatch(r"[\s\d.,;:!?%\-–—]*", stripped):  # a bare number or two
         return False
@@ -111,32 +126,45 @@ async def _speak(name: str, result: dict[str, Any], message: str) -> tuple[str, 
     import config
 
     if config.PHRASE_MODE != "template" and llm.chain() and not result.get("error"):
-        try:
-            payload = json.dumps(_pruned(result) or {}, default=str)
-            if payload == "{}":
-                # Everything was zero. Hand the model the raw numbers with a flag
-                # so it can answer "nobody has arrived yet" instead of "nothing to
-                # report" — a zero is the answer here, not noise.
-                payload = json.dumps({"all_zero": True, "data": result}, default=str)
-            out, model = await llm.complete(
-                [
-                    {"role": "system", "content": PHRASE_PROMPT},
-                    {
-                        "role": "user",
-                        "content": f"Question: {message}\nFetched data: {payload[:2500]}",
-                    },
-                ],
-                max_tokens=220,
-                temperature=0.2,
-                routes=llm.phrase_chain(),
-            )
+        payload = json.dumps(_pruned(result) or {}, default=str)
+        if payload == "{}":
+            # Everything was zero. Hand the model the raw numbers with a flag
+            # so it can answer "nobody has arrived yet" instead of "nothing to
+            # report" — a zero is the answer here, not noise.
+            payload = json.dumps({"all_zero": True, "data": result}, default=str)
+        # Two tries: a reasoning model spends part of the budget thinking, and a
+        # long list can outgrow it. Better to ask again with room than to show
+        # the organizer half a sentence.
+        for budget in (PHRASE_TOKENS, PHRASE_TOKENS * 2):
+            try:
+                out, model = await llm.complete(
+                    [
+                        {"role": "system", "content": PHRASE_PROMPT},
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Question: {message}\n"
+                                f"Read: {name}\n"
+                                f"Fetched data: {payload[:6000]}"
+                            ),
+                        },
+                    ],
+                    max_tokens=budget,
+                    temperature=0.2,
+                    routes=llm.phrase_chain(),
+                )
+            except Exception as exc:  # noqa: BLE001 — the templates are the safety net
+                print(f"[backstage] phrasing fell back to template: {exc}")
+                break
             text = (out.get("content") or "").strip()
+            if text and llm.was_cut_off(out):
+                print(f"[backstage] phrasing ran out of room at {budget} tokens; asking again")
+                continue
             if text and _looks_spoken(text):
                 return text, model
             if text:
                 print(f"[backstage] phrasing rejected ({text[:60]!r}); using the template")
-        except Exception as exc:  # noqa: BLE001 — the templates are the safety net
-            print(f"[backstage] phrasing fell back to template: {exc}")
+            break
 
     text = _template(name, result, message)
     return (text, "template") if text else None
@@ -253,12 +281,12 @@ def _template(name: str, result: dict[str, Any], message: str) -> str | None:
         return line
 
     if name == "unchecked_families":
-        families = result.get("families") or []
-        total = int(result.get("total") or len(families))
+        families = result.get("sample") or []
+        total = int(result.get("total_still_to_arrive") or len(families))
         if not total:
             return "Nobody is outstanding — every active family has arrived."
         names = ", ".join(f"{f['name']} ({f['class_name'] or 'no class'})" for f in families[:5])
-        more = "" if len(families) <= 5 else f", and {len(families) - 5} more shown"
+        more = "" if len(families) <= 5 else f", and {len(families) - 5} more"
         return f"{_plural(total, 'family')} still to arrive. First up: {names}{more}."
 
     if name == "album_status":
@@ -285,8 +313,10 @@ def _template(name: str, result: dict[str, Any], message: str) -> str | None:
         classes = result.get("classes") or []
         if not classes:
             return "No classes to report yet."
-        top = ", ".join(f"{c['class_name']} with {c['expected']} expected" for c in classes[:3])
-        return f"Top turnout expectations: {top}."
+        total = result.get("total_students") or sum(int(c["students"]) for c in classes)
+        head = f"{_plural(len(classes), 'class')}, {total} students in all."
+        tail = ", ".join(f"{c['class_name']} {c['students']}" for c in classes)
+        return f"{head} {tail}."
 
     if name == "find_family":
         matches = result.get("matches") or []
