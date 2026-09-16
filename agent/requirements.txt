@@ -1,5 +1,8 @@
-fastapi
-uvicorn
-openai
-pydantic
+﻿fastapi
+uvicorn[standard]
+httpx
+psycopg[binary,pool]
 python-dotenv
+pydantic
+edge-tts
+pytest

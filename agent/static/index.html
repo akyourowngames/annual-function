@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="icon" href="data:," />
+<title>Backstage · Event assistant</title>
+<style>
+  :root {
+    --ink: #0b0b14; --panel: #171422; --line: #c5b4ed26; --paper: #f5f1e8;
+    --muted: #b0a7bf; --lilac: #c5b4ed; --butter: #f1e594; --mint: #b7d6bb; --peach: #eab198;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ink); color: var(--paper);
+    font: 15px/1.55 ui-sans-serif, system-ui, "Segoe UI", Arial, sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 14px 22px; border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -0.4px; }
+  .brand .dot { width: 10px; height: 10px; border-radius: 999px; background: var(--butter); box-shadow: 0 0 0 4px #f1e59422; }
+  .brand .dot.live { background: var(--mint); animation: breathe 1.4s ease-in-out infinite; box-shadow: 0 0 0 5px #b7d6bb22; }
+  .brand small { display: block; font-weight: 400; font-size: 11px; color: var(--muted); }
+  @keyframes breathe { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+  .grow { flex: 1; }
+  select, input, button { font: inherit; color: inherit; }
+  select, input[type="text"], input[type="password"] {
+    background: #100e1a; border: 1px solid #c5b4ed30; border-radius: 11px; padding: 8px 11px; min-height: 40px;
+  }
+  select:focus, input:focus { outline: none; border-color: var(--lilac); box-shadow: 0 0 0 3px #c5b4ed14; }
+  button { background: #c5b4ed0b; border: 1px solid #c5b4ed30; border-radius: 999px; padding: 9px 15px; cursor: pointer; transition: background .15s, border-color .15s, transform .1s; }
+  button:hover { border-color: #c5b4ed70; background: #c5b4ed18; }
+  button:active { transform: scale(.97); }
+  button.primary, button.on { background: var(--butter); border-color: var(--butter); color: #302638; font-weight: 600; }
+  main { flex: 1; display: flex; flex-direction: column; max-width: 900px; width: 100%; margin: 0 auto; padding: 20px; gap: 14px; }
+  #log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-bottom: 8px; }
+  .turn { max-width: 92%; }
+  .turn.me { align-self: flex-end; text-align: right; }
+  .bubble { display: inline-block; padding: 11px 15px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); text-align: left; }
+  .turn.me .bubble { background: #223450; border-color: #7aa2d24a; border-bottom-right-radius: 5px; }
+  .turn.bot .bubble { border-bottom-left-radius: 5px; }
+  .tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font-size: 11px; color: var(--mint); border: 1px solid #b7d6bb40; background: #b7d6bb12; padding: 3px 9px; border-radius: 999px; animation: pop .18s ease; }
+  @keyframes pop { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+  .dock { display: flex; align-items: center; gap: 12px; padding-top: 6px; border-top: 1px solid var(--line); }
+  .mic {
+    width: 74px; height: 74px; border-radius: 999px; border: 1px solid #c5b4ed40;
+    background: radial-gradient(circle at 30% 25%, #c5b4ed33, #100e1a);
+    font-size: 26px; display: grid; place-items: center; flex: 0 0 auto;
+  }
+  .mic.live { background: radial-gradient(circle at 30% 25%, #b7d6bb66, #101a14); border-color: var(--mint); animation: pulse 1.2s infinite; }
+  .mic.speaking { border-color: var(--butter); box-shadow: 0 0 0 6px #f1e59420; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 #b7d6bb44; } 50% { box-shadow: 0 0 0 12px #b7d6bb00; } }
+  .dock input[type="text"] { flex: 1; }
+  .hint { color: var(--muted); font-size: 12px; }
+  .quick { display: flex; gap: 8px; flex-wrap: wrap; }
+  .quick button { font-size: 12px; padding: 6px 12px; }
+  #gate { position: fixed; inset: 0; background: #07070df2; display: grid; place-items: center; padding: 24px; z-index: 20; }
+  #gate .card { background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 26px; width: min(420px, 100%); }
+  #gate h1 { margin: 0 0 6px; font-size: 22px; letter-spacing: -0.5px; }
+  #gate p { color: var(--muted); margin: 0 0 16px; font-size: 13px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .err { color: #f1b4ac; font-size: 12px; min-height: 16px; }
+  .voice-group { display: flex; gap: 6px; align-items: center; }
+  .voice-group select { max-width: 240px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="dot" id="dot"></span>
+    <span>Backstage<small id="status">Ready</small></span>
+  </div>
+  <div class="grow"></div>
+  <div class="voice-group">
+    <select id="voice" title="Voice"></select>
+    <button id="preview" title="Hear this voice">▶</button>
+  </div>
+  <button id="handsFree" title="Keep listening after every answer">Hands-free: off</button>
+</header>
+
+<main>
+  <div class="quick">
+    <button data-q="Give me the brief.">The brief</button>
+    <button data-q="What needs my attention?">Needs attention</button>
+    <button data-q="How is the RSVP count looking?">RSVP count</button>
+    <button data-q="Who are the open support requests for?">Open requests</button>
+    <button data-q="How many families can we still reach?">Reach</button>
+  </div>
+  <div id="log"></div>
+  <div class="dock">
+    <button class="mic" id="mic" title="Hold to talk (or press Space)">🎙️</button>
+    <input type="text" id="text" placeholder="Hold the mic and speak, or type here…" autocomplete="off" />
+    <button class="primary" id="send">Ask</button>
+  </div>
+  <p class="hint" id="hint">Microphone works in Chrome or Edge. Hands-free keeps listening after each answer. Typing always works.</p>
+</main>
+
+<audio id="player" hidden></audio>
+
+<div id="gate">
+  <div class="card">
+    <h1>Backstage</h1>
+    <p>Private assistant for the event team. Enter the assistant key to continue.</p>
+    <div class="row">
+      <input type="password" id="key" placeholder="Assistant key" style="flex:1" />
+      <button class="primary" id="unlock">Open</button>
+    </div>
+    <p class="err" id="gateErr"></p>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const log = $("log"), mic = $("mic"), text = $("text"), hint = $("hint");
+  const player = $("player"), voiceSel = $("voice"), statusEl = $("status"), dot = $("dot");
+  let key = localStorage.getItem("backstage_key") || "";
+  let sessionId = "";
+  let handsFree = false;
+  let listening = false;
+  let speaking = false;
+  let busy = false;
+  let answerText = "";
+
+  const setStatus = (t) => { statusEl.textContent = t; };
+  const setDot = (live) => dot.classList.toggle("live", live);
+
+  // ---------------------------------------------------------------- speech in
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recog = null;
+  if (SR) {
+    recog = new SR();
+    recog.lang = "en-IN";
+    recog.continuous = true;
+    recog.interimResults = true;
+    recog.maxAlternatives = 1;
+    recog.onresult = (e) => {
+      let interim = "", final = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) final += r[0].transcript; else interim += r[0].transcript;
+      }
+      if (interim) text.value = interim;
+      if (final.trim()) { text.value = final.trim(); hush(); ask(final.trim()); }
+    };
+    recog.onend = () => {
+      listening = false; mic.classList.remove("live"); setDot(false);
+      if (handsFree && !speaking && !busy) setTimeout(listen, 280);
+      else if (!speaking) setStatus("Ready");
+    };
+    recog.onerror = (e) => {
+      listening = false; mic.classList.remove("live"); setDot(false);
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        handsFree = false; paintHandsFree();
+        hint.textContent = "Microphone blocked. Allow it in the browser, or type instead.";
+      } else if (e.error === "no-speech" || e.error === "aborted") {
+        if (handsFree && !speaking && !busy) setTimeout(listen, 400);
+      } else if (handsFree && !speaking && !busy) {
+        setTimeout(listen, 600);
+      }
+    };
+  } else {
+    hint.textContent = "This browser cannot listen. Use Chrome or Edge, or just type.";
+  }
+
+  function canListen() { return !!recog && !listening && !speaking && !busy; }
+  function listen() {
+    if (!canListen()) return;
+    try {
+      recog.start();
+      listening = true; mic.classList.add("live"); setDot(true); setStatus("Listening…");
+    } catch { /* already starting */ }
+  }
+  function hush() {
+    if (recog && listening) { try { recog.stop(); } catch {} }
+    listening = false; mic.classList.remove("live"); setDot(false);
+  }
+
+  // --------------------------------------------------------------- speech out
+  function finishSpeaking() {
+    speaking = false;
+    mic.classList.remove("speaking");
+    player.removeAttribute("src");
+    if (handsFree) setTimeout(listen, 200);
+    else setStatus("Ready");
+  }
+  player.onended = finishSpeaking;
+  player.onerror = () => { if (speaking) finishSpeaking(); };
+
+  let browserVoice = null; // last-resort fallback
+  function browserSpeak(txt) {
+    return new Promise((resolve) => {
+      if (!window.speechSynthesis) return resolve();
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(txt);
+      u.lang = "en-IN"; u.rate = 1.03;
+      u.onend = resolve; u.onerror = resolve;
+      speechSynthesis.speak(u);
+    });
+  }
+
+  async function speak(txt) {
+    if (!txt) return;
+    speaking = true; mic.classList.add("speaking"); setStatus("Speaking…"); setDot(false);
+    const url = `/api/speak?text=${encodeURIComponent(txt)}&voice=${encodeURIComponent(voiceSel.value)}&key=${encodeURIComponent(key)}`;
+    try {
+      player.src = url;
+      await player.play();
+    } catch {
+      try { await browserSpeak(txt); } catch {}
+      finishSpeaking();
+    }
+  }
+
+  // ------------------------------------------------------------------ voices
+  async function loadVoices() {
+    try {
+      const res = await fetch("/api/voices", { headers: { "x-assistant-key": key } });
+      if (!res.ok) return;
+      const data = await res.json();
+      voiceSel.innerHTML = "";
+      (data.voices || []).forEach((v) => {
+        const o = document.createElement("option");
+        o.value = v.id; o.textContent = v.label || v.id;
+        voiceSel.appendChild(o);
+      });
+      const saved = localStorage.getItem("backstage_voice");
+      const ids = [...voiceSel.options].map((o) => o.value);
+      voiceSel.value = saved && ids.includes(saved) ? saved : (data.default || ids[0] || "");
+      voiceSel.onchange = () => localStorage.setItem("backstage_voice", voiceSel.value);
+    } catch { /* keep the default */ }
+  }
+  $("preview").onclick = () => {
+    if (speaking) { player.pause(); finishSpeaking(); return; }
+    speak("Backstage ready. This is how I sound.");
+  };
+
+  // ------------------------------------------------------------------ talking
+  function add(role, txt) {
+    const wrap = document.createElement("div");
+    wrap.className = "turn " + (role === "me" ? "me" : "bot");
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.textContent = txt;
+    wrap.appendChild(bubble);
+    log.appendChild(wrap);
+    log.scrollTop = log.scrollHeight;
+    return wrap;
+  }
+  function chip(wrap, label) {
+    let bar = wrap.querySelector(".tools");
+    if (!bar) { bar = document.createElement("div"); bar.className = "tools"; wrap.appendChild(bar); }
+    const c = document.createElement("span");
+    c.className = "chip"; c.textContent = label;
+    bar.appendChild(c);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function ask(message) {
+    if (!message.trim() || busy) return;
+    busy = true;
+    hush();
+    if (speaking) { player.pause(); speaking = false; mic.classList.remove("speaking"); }
+    setStatus("Thinking…");
+    text.value = "";
+    add("me", message);
+    const bot = add("bot", "…");
+    const bubble = bot.querySelector(".bubble");
+    answerText = "";
+    try {
+      const res = await fetch("/api/chat/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-assistant-key": key },
+        body: JSON.stringify({ session_id: sessionId, message }),
+      });
+      if (res.status === 401) { showGate("Assistant key rejected."); busy = false; return; }
+      if (!res.ok || !res.body) throw new Error("HTTP " + res.status);
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() || "";
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data:")) continue;
+          let ev; try { ev = JSON.parse(line.slice(5).trim()); } catch { continue; }
+          if (ev.type === "tool") chip(bot, ev.label || ev.name);
+          else if (ev.type === "answer") { answerText = ev.text; bubble.textContent = ev.text; }
+        }
+      }
+      if (!answerText) bubble.textContent = "No answer came back.";
+    } catch (err) {
+      bubble.textContent = "That did not work: " + err.message;
+    } finally {
+      busy = false;
+      log.scrollTop = log.scrollHeight;
+      if (answerText) await speak(answerText);
+      else { setStatus(handsFree ? "Listening…" : "Ready"); if (handsFree) listen(); }
+    }
+  }
+
+  // ------------------------------------------------------------------ controls
+  function paintHandsFree() {
+    const b = $("handsFree");
+    b.textContent = "Hands-free: " + (handsFree ? "on" : "off");
+    b.classList.toggle("on", handsFree);
+  }
+  $("handsFree").onclick = () => {
+    handsFree = !handsFree;
+    paintHandsFree();
+    if (handsFree) listen(); else hush();
+    setStatus(handsFree ? "Listening…" : "Ready");
+  };
+
+  mic.addEventListener("mousedown", () => { if (speaking) { player.pause(); finishSpeaking(); } else listen(); });
+  mic.addEventListener("touchstart", (e) => { e.preventDefault(); if (speaking) { player.pause(); finishSpeaking(); } else listen(); }, { passive: false });
+  window.addEventListener("mouseup", () => { if (!handsFree) hush(); });
+  mic.addEventListener("touchend", () => { if (!handsFree) hush(); });
+  document.addEventListener("keydown", (e) => { if (e.code === "Space" && e.target.tagName !== "INPUT") { e.preventDefault(); listen(); } });
+  document.addEventListener("keyup", (e) => { if (e.code === "Space" && e.target.tagName !== "INPUT" && !handsFree) hush(); });
+
+  $("send").onclick = () => ask(text.value);
+  text.addEventListener("keydown", (e) => { if (e.key === "Enter") ask(text.value); });
+  document.querySelectorAll(".quick button").forEach((b) => (b.onclick = () => ask(b.dataset.q)));
+
+  // --------------------------------------------------------------------- gate
+  function showGate(message) {
+    $("gate").style.display = "grid";
+    $("gateErr").textContent = message || "";
+  }
+  async function open(keyValue) {
+    key = keyValue.trim();
+    const res = await fetch("/api/session", { method: "POST", headers: { "x-assistant-key": key } });
+    if (res.status !== 200) return false;
+    localStorage.setItem("backstage_key", key);
+    const data = await res.json();
+    sessionId = data.session_id;
+    $("gate").style.display = "none";
+    add("bot", data.greeting);
+    await loadVoices();
+    return true;
+  }
+  $("unlock").onclick = async () => {
+    if (!(await open($("key").value))) $("gateErr").textContent = "That key did not work.";
+  };
+  (async function boot() {
+    if (!key) { showGate(""); return; }
+    if (!(await open(key))) showGate("Your saved key is no longer valid.");
+  })();
+})();
+</script>
+</body>
+</html>
