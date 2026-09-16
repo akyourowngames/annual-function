@@ -15,6 +15,12 @@ One system, three doors:
 
 **Live:** https://annual-five.vercel.app
 
+There is a fourth door, and it never leaves the organizers' laptop:
+**Backstage**, a private voice assistant over the same database — *who hasn't
+arrived, set the limit for 5TH DAISY to six, add Sumita as a parent.* It answers
+from the live roster in under a second and changes nothing until it has read the
+change back. Design and reasoning: [`docs/backstage.md`](docs/backstage.md).
+
 ---
 
 ## 🎪 What it does
@@ -66,6 +72,7 @@ repo — set a long, random one yourself.
 | `node scripts/import-students.mjs` | Import the roster: `--dry-run` → `--apply` → `--verify` |
 | `python scripts/test_student_roster.py` | Workbook extraction checks |
 | `node --test scripts/identity-test.mjs` | Identity-matching & recovery checks |
+| `cd agent && pytest tests -q` | Backstage: routing, templates, audiences, hearing |
 
 ## 🗺️ How it's wired
 
@@ -102,8 +109,9 @@ annual-function/
 │   ├── lib/          db schema, server rules, invitation identity
 │   ├── scripts/      import, migration, and test runners
 │   └── docs link →   ../docs/running-the-product.md
-└── agent/   ← an early Python/FastAPI scaffold (retired —
-              the real helpdesk lives in the Next.js API)
+└── agent/   ← Backstage: the organizers' voice assistant (Python/FastAPI)
+               27 tools over the live roster, Whisper in, Edge TTS out
+               → ../docs/backstage.md
 ```
 
 ## 🎟️ The story so far
@@ -122,6 +130,10 @@ annual-function/
 - [x] Candid event album: families send photos to the bot, staff review in the workspace
 - [x] Public `/gallery` page staff can publish or hide, showing approved photos only
 - [x] Gate keeper role: a scanner-only key for the door team
+- [x] Backstage: the organizers' voice assistant — answers from the live roster in
+      under a second, and changes data only after it reads the change back
+- [x] Voice notes on every chat: Whisper turns a family's recording into the same
+      conversation, with a `Heard: "…"` echo so a mis-hearing is visible
 
 ---
 
