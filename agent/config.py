@@ -63,6 +63,12 @@ EMBED_BASE_URL = _env("EMBED_BASE_URL", "https://integrate.api.nvidia.com/v1").r
 EMBED_API_KEY = _env("EMBED_API_KEY") or NVIDIA_API_KEY
 EMBED_MODEL = _env("EMBED_MODEL", "nvidia/nemotron-3-embed-1b")
 
+# --- voice --------------------------------------------------------------
+# Edge TTS (edge-tts) neural voices: free, no key, natural. The page streams
+# MP3 from /api/speak. Swap the voice, or pick another in the UI.
+TTS_VOICE = _env("TTS_VOICE", "en-IN-NeerjaExpressiveNeural")
+TTS_RATE = _env("TTS_RATE", "+8%")
+
 # --- server -------------------------------------------------------------
 HOST = _env("AGENT_HOST", "127.0.0.1")
 PORT = int(_env("AGENT_PORT", "8000"))

@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import config
-from assistant import actions, db, identity, llm, router, session as sessions, tools
+from assistant import actions, db, identity, llm, router, session as sessions, tools, tts
 from assistant.prompts import greeting, system_prompt
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
@@ -49,6 +49,17 @@ def auth(x_assistant_key: str | None = Header(default=None)) -> bool:
     if config.ASSISTANT_KEY and x_assistant_key != config.ASSISTANT_KEY:
         raise HTTPException(status_code=401, detail="Bad assistant key")
     return True
+
+
+def auth_flexible(
+    x_assistant_key: str | None = Header(default=None), key: str | None = None
+) -> bool:
+    """For <audio src="...">, which cannot send headers — the key may be a query param."""
+    if not config.ASSISTANT_KEY:
+        return True
+    if x_assistant_key == config.ASSISTANT_KEY or key == config.ASSISTANT_KEY:
+        return True
+    raise HTTPException(status_code=401, detail="Bad assistant key")
 
 
 async def _run_tool_call(call: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
@@ -221,6 +232,28 @@ async def chat_stream(req: ChatRequest, _: bool = Depends(auth)) -> StreamingRes
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/voices")
+async def list_voices(_: bool = Depends(auth)) -> dict[str, Any]:
+    return {"voices": await tts.voices(), "default": config.TTS_VOICE}
+
+
+@app.get("/api/speak")
+async def speak(
+    text: str,
+    voice: str | None = None,
+    _: bool = Depends(auth_flexible),
+) -> StreamingResponse:
+    """Stream natural speech as MP3. Point an <audio> element straight at it."""
+    spoken = (text or "").strip()[:1200]
+    if not spoken:
+        raise HTTPException(status_code=400, detail="Nothing to say")
+    return StreamingResponse(
+        tts.stream(spoken, voice),
+        media_type="audio/mpeg",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
 
