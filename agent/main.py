@@ -9,13 +9,13 @@ import pathlib
 from contextlib import asynccontextmanager
 from typing import Any, Awaitable, Callable
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import config
-from assistant import actions, db, identity, llm, router, session as sessions, tools, tts
+from assistant import actions, db, identity, llm, router, session as sessions, stt, tools, tts
 from assistant.prompts import greeting, system_prompt
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
@@ -92,6 +92,80 @@ async def _execute_pending(pending: dict[str, Any]) -> str:
         if kind == "check_in":
             out = await actions.check_in_family(pending["code"])
             return f"Checked in {out['checked_in']} for {out.get('student') or out['code']}."
+        if kind == "guest_limit":
+            out = await actions.set_guest_limit(
+                scope=pending.get("scope", "all"),
+                class_name=pending.get("className"),
+                limit=int(pending.get("limit") or 0),
+            )
+            skipped = out.get("skipped") or []
+            line = f"Guest limit set to {out['limit']} for {out['updated']} students."
+            if skipped:
+                line += f" {len(skipped)} were skipped because they already have more guests than that."
+            return line
+        if kind == "send_invitations":
+            out = await actions.send_invitations(
+                scope=pending.get("scope", "all"), class_name=pending.get("className")
+            )
+            line = f"Sent {out['sent']} invitation passes."
+            if out.get("failed"):
+                line += f" {out['failed']} failed."
+            if out.get("remaining"):
+                line += f" {out['remaining']} are still queued."
+            return line
+        if kind == "create_student":
+            out = await actions.create_student(
+                admission=pending["admission"],
+                name=pending["name"],
+                class_name=pending["className"],
+                guest_limit=pending.get("guestLimit"),
+            )
+            return (
+                f"Added {out['name']}, admission {out['admission']}, class {out['className']}. "
+                f"Invitation code {out.get('code')}. Nothing has been sent."
+            )
+        if kind == "regenerate_pass":
+            out = await actions.regenerate_pass(pending["code"])
+            return (
+                f"Done. The new code is {out['code']}. "
+                f"The old code {out['oldCode']} no longer works."
+            )
+        if kind == "invitation_status":
+            out = await actions.set_invitation_status(pending["code"], bool(pending.get("active")))
+            return f"The pass is now {out.get('status') or ('active' if pending.get('active') else 'disabled')}."
+        if kind == "add_guest":
+            out = await actions.add_guest(
+                pending["code"], pending["name"], pending.get("relationship")
+            )
+            registered = out.get("registered")
+            remaining = out.get("remaining")
+            return (
+                f"Added {out['name']}. {registered} "
+                f"{'guest' if registered == 1 else 'guests'} registered, {remaining} "
+                f"{'seat' if remaining == 1 else 'seats'} left."
+            )
+        if kind == "remove_guest":
+            out = await actions.remove_guest(pending["code"], pending["guestName"])
+            return f"Removed {out['removed']} from {out['code']}."
+        if kind == "rename_guest":
+            out = await actions.rename_guest(
+                pending["code"],
+                pending["currentName"],
+                pending["newName"],
+                pending.get("relationship"),
+            )
+            role = f" as {out['relationship']}" if out.get("relationship") else ""
+            return (
+                f"Changed {out['was']} to {out['name']}{role} on {out['code']}. "
+                f"{out.get('registered')} guests registered, {out.get('remaining')} seats left."
+            )
+        if kind == "resend_pass":
+            out = await actions.resend_pass(pending["code"])
+            if out.get("sent"):
+                return f"Sent their pass just now ({out['code']})."
+            if out.get("unreachable"):
+                return "I could not reach that family on chat yet, so nothing was sent."
+            return f"That did not send: {out.get('failed', 0)} failed."
         return "I do not know how to do that."
     except Exception as exc:  # noqa: BLE001
         return f"That did not go through: {exc}"
@@ -113,7 +187,7 @@ async def run_turn(session_id: str, message: str, emit: Emit) -> dict[str, Any]:
         return {"text": reply, "tools": ["confirm"], "model": "actions"}
     if pending and sessions.negative(message):
         session["pending"] = None
-        reply = "Cancelled. Nothing was sent."
+        reply = "Cancelled. Nothing was changed."
         sessions.remember(session, "assistant", reply)
         await emit({"type": "answer", "text": reply, "tools": [], "model": "actions"})
         return {"text": reply, "tools": [], "model": "actions"}
@@ -145,16 +219,20 @@ async def run_turn(session_id: str, message: str, emit: Emit) -> dict[str, Any]:
     used: list[str] = []
     model = ""
     text = ""
+    cut_off = False
 
     for _round in range(config.TOOL_ROUNDS):
         try:
-            msg, model = await llm.complete(messages, tools=tools.TOOL_SCHEMAS, max_tokens=500)
+            msg, model = await llm.complete(
+                messages, tools=tools.TOOL_SCHEMAS, max_tokens=config.ANSWER_TOKENS
+            )
         except Exception as exc:  # noqa: BLE001
             text = f"My brain is not reachable right now ({type(exc).__name__})."
             break
         calls = msg.get("tool_calls") or []
         if not calls:
             text = (msg.get("content") or "").strip()
+            cut_off = llm.was_cut_off(msg)
             break
         messages.append(llm._clean(msg))
         picked = calls[:4]
@@ -163,6 +241,17 @@ async def run_turn(session_id: str, message: str, emit: Emit) -> dict[str, Any]:
         used.extend((c.get("function") or {}).get("name") or "tool" for c in picked)
     else:
         text = "That needed too many steps — ask me for one thing at a time."
+
+    if cut_off and text:
+        # It ran out of room mid-sentence. Ask once more with headroom rather
+        # than trailing off in the organizer's ear.
+        try:
+            whole, model = await llm.complete(messages, max_tokens=config.ANSWER_TOKENS * 2)
+            fuller = (whole.get("content") or "").strip()
+            if fuller and not llm.was_cut_off(whole):
+                text = fuller
+        except Exception as exc:  # noqa: BLE001
+            print(f"[backstage] could not finish the answer: {exc}")
 
     if not text:
         text = "I could not put that into words. Try asking again."
@@ -187,6 +276,8 @@ async def health() -> dict[str, Any]:
         "fallback": bool(config.FALLBACK_API_KEY),
         "models": [model for _, _, model in llm.chain()],
         "phrase_mode": config.PHRASE_MODE,
+        "hearing": stt.ready(),
+        "hearing_model": config.STT_MODEL if stt.ready() else "",
         "actions": bool(config.ADMIN_ACCESS_KEY),
         "identity": who,
     }
@@ -241,6 +332,23 @@ async def list_voices(_: bool = Depends(auth)) -> dict[str, Any]:
     return {"voices": await tts.voices(), "default": config.TTS_VOICE}
 
 
+@app.post("/api/transcribe")
+async def transcribe(request: Request, _: bool = Depends(auth)) -> dict[str, Any]:
+    """Hear a clip the page recorded. The audio is the raw body, not a form.
+
+    Sending the bytes straight through keeps the browser free of any speech
+    library: it only has to record.
+    """
+    audio = await request.body()
+    if not audio:
+        raise HTTPException(status_code=400, detail="No audio")
+    try:
+        heard = await stt.transcribe(audio, request.headers.get("content-type", ""))
+    except stt.SttUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"text": heard}
+
+
 @app.get("/api/speak")
 async def speak(
     text: str,
@@ -248,7 +356,12 @@ async def speak(
     _: bool = Depends(auth_flexible),
 ) -> StreamingResponse:
     """Stream natural speech as MP3. Point an <audio> element straight at it."""
-    spoken = (text or "").strip()[:1200]
+    # Generous, because a real answer can now be a full class list. Long enough
+    # that this should never fire; if it does, cut on a word rather than leaving
+    # a chopped word in the organizer's ear.
+    spoken = (text or "").strip()
+    if len(spoken) > config.MAX_SPOKEN_CHARS:
+        spoken = spoken[: config.MAX_SPOKEN_CHARS].rsplit(" ", 1)[0].rstrip(" ,;:")
     if not spoken:
         raise HTTPException(status_code=400, detail="Nothing to say")
     return StreamingResponse(

@@ -96,7 +96,7 @@
     <input type="text" id="text" placeholder="Hold the mic and speak, or type here…" autocomplete="off" />
     <button class="primary" id="send">Ask</button>
   </div>
-  <p class="hint" id="hint">Microphone works in Chrome or Edge. Hands-free keeps listening after each answer. Typing always works.</p>
+  <p class="hint" id="hint">Your browser records and Whisper transcribes — speak, then pause. Hands-free keeps listening after each answer. Typing always works.</p>
 </main>
 
 <audio id="player" hidden></audio>
@@ -129,54 +129,137 @@
   const setStatus = (t) => { statusEl.textContent = t; };
   const setDot = (live) => dot.classList.toggle("live", live);
 
-  // ---------------------------------------------------------------- speech in
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  let recog = null;
-  if (SR) {
-    recog = new SR();
-    recog.lang = "en-IN";
-    recog.continuous = true;
-    recog.interimResults = true;
-    recog.maxAlternatives = 1;
-    recog.onresult = (e) => {
-      let interim = "", final = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const r = e.results[i];
-        if (r.isFinal) final += r[0].transcript; else interim += r[0].transcript;
-      }
-      if (interim) text.value = interim;
-      if (final.trim()) { text.value = final.trim(); hush(); ask(final.trim()); }
-    };
-    recog.onend = () => {
-      listening = false; mic.classList.remove("live"); setDot(false);
-      if (handsFree && !speaking && !busy) setTimeout(listen, 280);
-      else if (!speaking) setStatus("Ready");
-    };
-    recog.onerror = (e) => {
-      listening = false; mic.classList.remove("live"); setDot(false);
-      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-        handsFree = false; paintHandsFree();
-        hint.textContent = "Microphone blocked. Allow it in the browser, or type instead.";
-      } else if (e.error === "no-speech" || e.error === "aborted") {
-        if (handsFree && !speaking && !busy) setTimeout(listen, 400);
-      } else if (handsFree && !speaking && !busy) {
-        setTimeout(listen, 600);
-      }
-    };
-  } else {
-    hint.textContent = "This browser cannot listen. Use Chrome or Edge, or just type.";
+  // ------------------------------------------------------- speech in (Whisper)
+  // The page only records; the server transcribes with Whisper. No browser
+  // speech recognition, which exists in some browsers and not others and gives
+  // up without saying why. In hands-free the clip ends itself once you stop
+  // talking, which is what a loudness check below is for.
+  const MIME_CHOICES = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus",
+    "audio/mp4",
+  ];
+  const VOICE_RMS = 0.008;   // louder than this counts as someone talking
+  const SILENCE_MS = 1100;   // this much quiet after speech ends the turn
+  const NO_SPEECH_MS = 6000; // never spoke at all: give up without sending
+  const MAX_CLIP_MS = 30000;
+
+  const canRecord = !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
+  const pickMime = () => MIME_CHOICES.find((m) => MediaRecorder.isTypeSupported(m)) || "";
+
+  let stream = null, rec = null, chunks = [], frame = 0, recording = false, discard = false;
+  let audioCtx = null, analyser = null, levels = null;
+  let heardVoice = false, silentFor = 0, clipStart = 0;
+
+  if (!canRecord) {
+    hint.textContent = "This browser cannot record. Use Chrome, Edge, Safari or Firefox — or just type.";
   }
 
-  function canListen() { return !!recog && !listening && !speaking && !busy; }
-  function listen() {
-    if (!canListen()) return;
-    try {
-      recog.start();
-      listening = true; mic.classList.add("live"); setDot(true); setStatus("Listening…");
-    } catch { /* already starting */ }
+  async function micStream() {
+    if (!stream || !stream.active) {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      });
+      audioCtx = null; analyser = null;
+    }
+    return stream;
   }
+
+  function loudness() {
+    if (!audioCtx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new Ctx();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 1024;
+      audioCtx.createMediaStreamSource(stream).connect(analyser);
+      levels = new Float32Array(analyser.fftSize);
+    }
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    analyser.getFloatTimeDomainData(levels);
+    let sum = 0;
+    for (let i = 0; i < levels.length; i++) sum += levels[i] * levels[i];
+    return Math.sqrt(sum / levels.length);
+  }
+
+  function startRecording() {
+    if (recording || busy || speaking || !canRecord) return;
+    micStream().then((s) => {
+      chunks = []; heardVoice = false; silentFor = 0; discard = false;
+      clipStart = performance.now();
+      const mime = pickMime();
+      rec = new MediaRecorder(s, mime ? { mimeType: mime } : undefined);
+      rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop = transcribeClip;
+      rec.start(250);
+      recording = true; listening = true;
+      mic.classList.add("live"); setDot(true); setStatus("Listening…");
+      watchLoudness();
+    }).catch(() => {
+      handsFree = false; paintHandsFree();
+      hint.textContent = "Microphone blocked. Allow it in the browser, or type instead.";
+      setStatus("Ready");
+    });
+  }
+
+  function watchLoudness() {
+    let last = performance.now();
+    const tick = () => {
+      if (!recording) return;
+      const now = performance.now();
+      const dt = now - last;
+      last = now;
+      if (loudness() > VOICE_RMS) { heardVoice = true; silentFor = 0; }
+      else if (heardVoice) { silentFor += dt; }
+      const age = now - clipStart;
+      if (heardVoice && silentFor > SILENCE_MS) return stopRecording();
+      if (!heardVoice && age > NO_SPEECH_MS) return stopRecording();
+      if (age > MAX_CLIP_MS) return stopRecording();
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+  }
+
+  function stopRecording() {
+    if (!recording) return;
+    recording = false; listening = false;
+    cancelAnimationFrame(frame);
+    mic.classList.remove("live"); setDot(false);
+    try { rec.stop(); } catch {}
+  }
+
+  async function transcribeClip() {
+    const type = (rec && rec.mimeType) || "audio/webm";
+    const blob = new Blob(chunks, { type });
+    chunks = [];
+    if (discard) { discard = false; return; }
+    if (!heardVoice || blob.size < 1024) { afterRecording(); return; }
+    setStatus("Got it…");
+    try {
+      const res = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": type, "x-assistant-key": key },
+        body: blob,
+      });
+      if (res.status === 401) { showGate("Assistant key rejected."); return; }
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const heard = ((await res.json()).text || "").trim();
+      if (!heard) { setStatus("I did not catch that."); afterRecording(); return; }
+      text.value = heard;
+      ask(heard);
+    } catch {
+      setStatus("I could not make that out — try again.");
+      afterRecording();
+    }
+  }
+
+  function afterRecording() {
+    if (handsFree && !speaking && !busy) setTimeout(startRecording, 300);
+    else setStatus("Ready");
+  }
+
   function hush() {
-    if (recog && listening) { try { recog.stop(); } catch {} }
+    if (recording) { discard = true; stopRecording(); }
     listening = false; mic.classList.remove("live"); setDot(false);
   }
 
@@ -185,7 +268,7 @@
     speaking = false;
     mic.classList.remove("speaking");
     player.removeAttribute("src");
-    if (handsFree) setTimeout(listen, 200);
+    if (handsFree) setTimeout(startRecording, 200);
     else setStatus("Ready");
   }
   player.onended = finishSpeaking;
@@ -303,7 +386,7 @@
       busy = false;
       log.scrollTop = log.scrollHeight;
       if (answerText) await speak(answerText);
-      else { setStatus(handsFree ? "Listening…" : "Ready"); if (handsFree) listen(); }
+      else { setStatus(handsFree ? "Listening…" : "Ready"); if (handsFree) startRecording(); }
     }
   }
 
@@ -316,16 +399,16 @@
   $("handsFree").onclick = () => {
     handsFree = !handsFree;
     paintHandsFree();
-    if (handsFree) listen(); else hush();
+    if (handsFree) startRecording(); else stopRecording();
     setStatus(handsFree ? "Listening…" : "Ready");
   };
 
-  mic.addEventListener("mousedown", () => { if (speaking) { player.pause(); finishSpeaking(); } else listen(); });
-  mic.addEventListener("touchstart", (e) => { e.preventDefault(); if (speaking) { player.pause(); finishSpeaking(); } else listen(); }, { passive: false });
-  window.addEventListener("mouseup", () => { if (!handsFree) hush(); });
-  mic.addEventListener("touchend", () => { if (!handsFree) hush(); });
-  document.addEventListener("keydown", (e) => { if (e.code === "Space" && e.target.tagName !== "INPUT") { e.preventDefault(); listen(); } });
-  document.addEventListener("keyup", (e) => { if (e.code === "Space" && e.target.tagName !== "INPUT" && !handsFree) hush(); });
+  mic.addEventListener("mousedown", () => { if (speaking) { player.pause(); finishSpeaking(); } else startRecording(); });
+  mic.addEventListener("touchstart", (e) => { e.preventDefault(); if (speaking) { player.pause(); finishSpeaking(); } else startRecording(); }, { passive: false });
+  window.addEventListener("mouseup", () => { if (!handsFree) stopRecording(); });
+  mic.addEventListener("touchend", () => { if (!handsFree) stopRecording(); });
+  document.addEventListener("keydown", (e) => { if (e.code === "Space" && e.target.tagName !== "INPUT") { e.preventDefault(); startRecording(); } });
+  document.addEventListener("keyup", (e) => { if (e.code === "Space" && e.target.tagName !== "INPUT" && !handsFree) stopRecording(); });
 
   $("send").onclick = () => ask(text.value);
   text.addEventListener("keydown", (e) => { if (e.key === "Enter") ask(text.value); });

@@ -100,16 +100,42 @@ export async function PATCH(request: Request) {
     sameOrigin(request);
     await requireStaff(true);
     const b = await body(request);
-    if (b.codes !== undefined) {
-      if (!Array.isArray(b.codes))
-        throw new HttpError("Select students to edit.");
+    if (b.codes !== undefined || b.audience !== undefined || b.className !== undefined) {
       if (b.guestLimit === undefined)
         throw new HttpError("Choose a guest limit to apply.");
       const limit = integer(b.guestLimit, "Guest limit");
-      const codes = b.codes.map((c) => text(c, "Invitation code", 64).toUpperCase());
-      if (!codes.length) throw new HttpError("Select at least one student.");
-      if (codes.length > 1000)
-        throw new HttpError("Too many students selected.");
+      // Resolve the target set from the real roster unless explicit codes were
+      // given: "everyone" or a class name. Nothing is hardcoded — the class is
+      // matched against students.class in the database.
+      let codes: string[];
+      if (b.codes !== undefined) {
+        if (!Array.isArray(b.codes))
+          throw new HttpError("Select students to edit.");
+        codes = b.codes.map((c) => text(c, "Invitation code", 64).toUpperCase());
+        if (!codes.length) throw new HttpError("Select at least one student.");
+      } else {
+        const className =
+          typeof b.className === "string" && b.className.trim()
+            ? text(b.className, "Class", 120)
+            : null;
+        if (!className && b.audience !== "all")
+          throw new HttpError("Choose a class, or everyone.");
+        const base = getDb()
+          .select({ code: invitations.invitationCode })
+          .from(invitations)
+          .innerJoin(students, eq(invitations.studentId, students.id));
+        const matched = className
+          ? await base.where(
+              sql`lower(trim(coalesce(${students.className}, ''))) = lower(trim(${className}))`,
+            )
+          : await base;
+        codes = matched.map((r) => r.code);
+        if (!codes.length)
+          throw new HttpError(
+            className ? `No students are in ${className}.` : "No students found.",
+          );
+      }
+      if (codes.length > 1000) throw new HttpError("Too many students selected.");
       const fits = sql`
         (select count(*) from guests where invitation_id = ${invitations.id}) <= ${limit}
         and (select count(*) from check_ins where invitation_id = ${invitations.id}) <= ${limit}`;

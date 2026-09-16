@@ -64,8 +64,13 @@ EMBED_API_KEY = _env("EMBED_API_KEY") or NVIDIA_API_KEY
 EMBED_MODEL = _env("EMBED_MODEL", "nvidia/nemotron-3-embed-1b")
 
 # --- voice --------------------------------------------------------------
-# Edge TTS (edge-tts) neural voices: free, no key, natural. The page streams
-# MP3 from /api/speak. Swap the voice, or pick another in the UI.
+# Speech in: the page records a clip and posts it to /api/transcribe, where
+# Groq Whisper turns it into words. Same key as the brain — one provider, one
+# quota. Whisper takes the browser's own webm/ogg/mp4 audio as-is.
+STT_MODEL = _env("STT_MODEL", "whisper-large-v3-turbo")
+
+# Speech out: Edge TTS (edge-tts) neural voices: free, no key, natural. The page
+# streams MP3 from /api/speak. Swap the voice, or pick another in the UI.
 TTS_VOICE = _env("TTS_VOICE", "en-IN-NeerjaExpressiveNeural")
 TTS_RATE = _env("TTS_RATE", "+8%")
 
@@ -74,10 +79,13 @@ HOST = _env("AGENT_HOST", "127.0.0.1")
 PORT = int(_env("AGENT_PORT", "8000"))
 
 # --- latency knobs ------------------------------------------------------
-ANSWER_TOKENS = int(_env("ANSWER_TOKENS", "320"))
+ANSWER_TOKENS = int(_env("ANSWER_TOKENS", "700"))
 TOOL_ROUNDS = int(_env("TOOL_ROUNDS", "3"))
 CACHE_TTL = float(_env("CACHE_TTL", "4"))
 MODEL_TIMEOUT = float(_env("MODEL_TIMEOUT", "45"))
+# How long an answer may get before /api/speak trims it. Generous on purpose:
+# an organizer asking for the class breakdown should hear all of it.
+MAX_SPOKEN_CHARS = int(_env("MAX_SPOKEN_CHARS", "3000"))
 # How the fast path words a fetched answer: "model" (natural, ~0.4s) or
 # "template" (instant, mechanical, offline-safe).
 PHRASE_MODE = _env("PHRASE_MODE", "model")

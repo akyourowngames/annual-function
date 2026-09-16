@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { handleTelegramInbound, parseTelegramUpdate } from "../lib/server/telegram/handler.ts";
+import { handleTelegramInbound, parseTelegramUpdate, parseTelegramVoice } from "../lib/server/telegram/handler.ts";
+import { heardPrefix, tooLong } from "../lib/server/telegram/voice.ts";
 
 function fakeDeps(overrides = {}) {
   const sent = [];
@@ -157,5 +158,38 @@ describe("telegram handler", () => {
     assert.equal(d.sent.length, 0);
     const textParsed = parseTelegramUpdate(update({ message_id: 8, chat: { id: 424242 }, text: "1" }));
     assert.deepEqual(textParsed, { chatId: "424242", text: "1" });
+  });
+});
+
+describe("telegram voice notes", () => {
+  const chat = { id: 424242 };
+  it("reads a voice note", () => {
+    const r = parseTelegramVoice(
+      update({ chat, voice: { file_id: "v1", mime_type: "audio/ogg", duration: 7 } }),
+    );
+    assert.deepEqual(r, { chatId: "424242", fileId: "v1", mime: "audio/ogg", duration: 7 });
+  });
+  it("reads an audio file and defaults mime/duration", () => {
+    const r = parseTelegramVoice(update({ chat, audio: { file_id: "a1" } }));
+    assert.equal(r.fileId, "a1");
+    assert.equal(r.mime, "audio/ogg");
+    assert.equal(r.duration, 0);
+  });
+  it("ignores text, photos, and empty updates", () => {
+    assert.equal(parseTelegramVoice(update({ chat, text: "hi" })), null);
+    assert.equal(parseTelegramVoice(update({ chat, photo: [{ file_id: "p" }] })), null);
+    assert.equal(parseTelegramVoice({}), null);
+  });
+  it("shows what was heard, and flags long clips", () => {
+    const saved = process.env.TELEGRAM_SHOW_TRANSCRIPT;
+    delete process.env.TELEGRAM_SHOW_TRANSCRIPT;
+    assert.equal(heardPrefix("  set   guest limit 6 "), "Heard: “set guest limit 6”");
+    assert.equal(heardPrefix("   "), null);
+    process.env.TELEGRAM_SHOW_TRANSCRIPT = "0";
+    assert.equal(heardPrefix("anything"), null);
+    if (saved === undefined) delete process.env.TELEGRAM_SHOW_TRANSCRIPT;
+    else process.env.TELEGRAM_SHOW_TRANSCRIPT = saved;
+    assert.equal(tooLong(181), true);
+    assert.equal(tooLong(30), false);
   });
 });

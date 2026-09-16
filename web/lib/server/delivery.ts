@@ -233,6 +233,26 @@ export async function deliverInvitations(input: {
   return { sent, failed, remaining: Math.max(0, targets.length - batch.length), unreachable };
 }
 
+// Send specific families their pass (one-off resends from the staff workspace
+// or the voice assistant). Skips anyone who has no messaging contact yet.
+export async function deliverToCodes(codes: string[]): Promise<{
+  sent: number;
+  failed: number;
+  unreachable: number;
+  remaining: number;
+}> {
+  let sent = 0;
+  let failed = 0;
+  let unreachable = 0;
+  for (const code of codes) {
+    const outcome = await deliverInvitation(code);
+    if (outcome.status === "sent") sent++;
+    else if (outcome.status === "skipped") unreachable++;
+    else failed++;
+  }
+  return { sent, failed, unreachable, remaining: 0 };
+}
+
 // Send a free-text announcement (or reminder) to an audience. Doesn't re-send
 // to anyone who already got this exact announcement.
 export async function sendAnnouncement(input: {
