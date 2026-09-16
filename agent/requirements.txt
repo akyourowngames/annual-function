@@ -1,5 +1,7 @@
 fastapi
-uvicorn
-openai
-pydantic
+uvicorn[standard]
+httpx
+psycopg[binary,pool]
 python-dotenv
+pydantic
+pytest

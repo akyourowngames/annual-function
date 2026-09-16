@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Backstage · Event assistant</title>
+<style>
+  :root {
+    --ink: #0b0b14; --panel: #171422; --line: #c5b4ed26; --paper: #f5f1e8;
+    --muted: #b0a7bf; --lilac: #c5b4ed; --butter: #f1e594; --mint: #b7d6bb; --peach: #eab198;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ink); color: var(--paper);
+    font: 15px/1.55 ui-sans-serif, system-ui, "Segoe UI", Arial, sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 16px 22px; border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -0.4px; }
+  .brand .dot { width: 10px; height: 10px; border-radius: 999px; background: var(--butter); box-shadow: 0 0 0 4px #f1e59422; }
+  .brand small { display: block; font-weight: 400; font-size: 11px; color: var(--muted); letter-spacing: 0.2px; }
+  .grow { flex: 1; }
+  select, input, button, textarea { font: inherit; color: inherit; }
+  select, input[type="text"], input[type="password"] {
+    background: #100e1a; border: 1px solid #c5b4ed30; border-radius: 11px;
+    padding: 8px 11px; min-height: 40px;
+  }
+  select:focus, input:focus { outline: none; border-color: var(--lilac); box-shadow: 0 0 0 3px #c5b4ed14; }
+  button {
+    background: #c5b4ed0b; border: 1px solid #c5b4ed30; border-radius: 999px;
+    padding: 9px 15px; cursor: pointer; transition: background .15s, border-color .15s, transform .1s;
+  }
+  button:hover { border-color: #c5b4ed70; background: #c5b4ed18; }
+  button:active { transform: scale(.97); }
+  button.primary { background: var(--butter); border-color: var(--butter); color: #302638; font-weight: 600; }
+  main { flex: 1; display: flex; flex-direction: column; max-width: 900px; width: 100%; margin: 0 auto; padding: 22px; gap: 16px; }
+  #log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-bottom: 8px; }
+  .turn { max-width: 92%; }
+  .turn.me { align-self: flex-end; text-align: right; }
+  .bubble {
+    display: inline-block; padding: 11px 15px; border-radius: 16px;
+    background: var(--panel); border: 1px solid var(--line); text-align: left;
+  }
+  .turn.me .bubble { background: #223450; border-color: #7aa2d24a; border-bottom-right-radius: 5px; }
+  .turn.bot .bubble { border-bottom-left-radius: 5px; }
+  .tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip {
+    font-size: 11px; color: var(--mint); border: 1px solid #b7d6bb40; background: #b7d6bb12;
+    padding: 3px 9px; border-radius: 999px; animation: pop .18s ease;
+  }
+  @keyframes pop { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+  .dock { display: flex; align-items: center; gap: 12px; padding-top: 6px; border-top: 1px solid var(--line); }
+  .mic {
+    width: 74px; height: 74px; border-radius: 999px; border: 1px solid #c5b4ed40;
+    background: radial-gradient(circle at 30% 25%, #c5b4ed33, #100e1a);
+    font-size: 26px; display: grid; place-items: center; flex: 0 0 auto;
+  }
+  .mic.live { background: radial-gradient(circle at 30% 25%, #b7d6bb66, #101a14); border-color: var(--mint); animation: pulse 1.1s infinite; }
+  .mic.speaking { border-color: var(--butter); box-shadow: 0 0 0 6px #f1e59420; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 #b7d6bb44; } 50% { box-shadow: 0 0 0 12px #b7d6bb00; } }
+  .dock input[type="text"] { flex: 1; }
+  .hint { color: var(--muted); font-size: 12px; }
+  .quick { display: flex; gap: 8px; flex-wrap: wrap; }
+  .quick button { font-size: 12px; padding: 6px 12px; }
+  #gate { position: fixed; inset: 0; background: #07070df2; display: grid; place-items: center; padding: 24px; z-index: 20; }
+  #gate .card { background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 26px; width: min(420px, 100%); }
+  #gate h1 { margin: 0 0 6px; font-size: 22px; letter-spacing: -0.5px; }
+  #gate p { color: var(--muted); margin: 0 0 16px; font-size: 13px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .err { color: #f1b4ac; font-size: 12px; min-height: 16px; }
+  .status { width: 8px; height: 8px; border-radius: 999px; background: var(--mint); display: inline-block; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="dot"></span>
+    <span>Backstage<small>Event assistant · Everest Public School</small></span>
+  </div>
+  <div class="grow"></div>
+  <select id="lang" title="Language">
+    <option value="en-IN">English</option>
+    <option value="hi-IN">Hinglish</option>
+  </select>
+  <select id="voice" title="Voice"></select>
+  <button id="autolisten" title="Keep listening after each answer">Hands-free: off</button>
+</header>
+
+<main>
+  <div class="quick">
+    <button data-q="Give me the brief.">The brief</button>
+    <button data-q="What needs my attention?">Needs attention</button>
+    <button data-q="How is the RSVP count looking?">RSVP count</button>
+    <button data-q="Who are the open support requests for?">Open requests</button>
+    <button data-q="How many families can we still reach?">Reach</button>
+  </div>
+  <div id="log"></div>
+  <div class="dock">
+    <button class="mic" id="mic" title="Hold to talk (or press Space)">🎙️</button>
+    <input type="text" id="text" placeholder="Hold the mic and speak, or type here…" autocomplete="off" />
+    <button class="primary" id="send">Ask</button>
+  </div>
+  <p class="hint" id="hint">Microphone works on this page in Chrome or Edge. Typing always works.</p>
+</main>
+
+<div id="gate">
+  <div class="card">
+    <h1>Backstage</h1>
+    <p>Private assistant for the event team. Enter the assistant key to continue.</p>
+    <div class="row">
+      <input type="password" id="key" placeholder="Assistant key" style="flex:1" />
+      <button class="primary" id="unlock">Open</button>
+    </div>
+    <p class="err" id="gateErr"></p>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const log = $("log"), mic = $("mic"), text = $("text"), hint = $("hint");
+  let key = localStorage.getItem("backstage_key") || "";
+  let sessionId = "";
+  let autoListen = false;
+  let listening = false;
+  let speaking = false;
+  let busy = false;
+  let answerText = "";
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recog = null;
+  if (SR) {
+    recog = new SR();
+    recog.continuous = false;
+    recog.interimResults = true;
+    recog.onresult = (e) => {
+      let interim = "", final = "";
+      for (const r of e.results) (r.isFinal ? final = r[0].transcript : interim += r[0].transcript);
+      text.value = final || interim;
+      if (final) { stopListening(); ask(final); }
+    };
+    recog.onend = () => { listening = false; mic.classList.remove("live"); };
+    recog.onerror = (e) => {
+      listening = false; mic.classList.remove("live");
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") hint.textContent = "Microphone blocked. Allow it in the browser, or type instead.";
+    };
+  } else {
+    hint.textContent = "This browser cannot listen. Use Chrome or Edge, or just type.";
+  }
+
+  function startListening() {
+    if (!recog || listening || speaking) return;
+    try { recog.lang = $("lang").value; recog.start(); listening = true; mic.classList.add("live"); } catch {}
+  }
+  function stopListening() { if (recog && listening) { try { recog.stop(); } catch {} } listening = false; mic.classList.remove("live"); }
+
+  mic.addEventListener("mousedown", startListening);
+  mic.addEventListener("touchstart", (e) => { e.preventDefault(); startListening(); }, { passive: false });
+  window.addEventListener("mouseup", stopListening);
+  mic.addEventListener("touchend", stopListening);
+  document.addEventListener("keydown", (e) => { if (e.code === "Space" && e.target.tagName !== "INPUT") { e.preventDefault(); startListening(); } });
+  document.addEventListener("keyup", (e) => { if (e.code === "Space" && e.target.tagName !== "INPUT") stopListening(); });
+
+  $("autolisten").onclick = () => {
+    autoListen = !autoListen;
+    $("autolisten").textContent = "Hands-free: " + (autoListen ? "on" : "off");
+  };
+
+  function add(role, txt) {
+    const wrap = document.createElement("div");
+    wrap.className = "turn " + (role === "me" ? "me" : "bot");
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.textContent = txt;
+    wrap.appendChild(bubble);
+    log.appendChild(wrap);
+    log.scrollTop = log.scrollHeight;
+    return wrap;
+  }
+  function chip(wrap, label) {
+    let bar = wrap.querySelector(".tools");
+    if (!bar) { bar = document.createElement("div"); bar.className = "tools"; wrap.appendChild(bar); }
+    const c = document.createElement("span");
+    c.className = "chip";
+    c.textContent = label;
+    bar.appendChild(c);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function voices() {
+    const list = speechSynthesis.getVoices() || [];
+    const prefer = list.filter((v) => /en-IN|hi-IN|en-GB|en-US|Google|Microsoft/.test(v.lang + v.name));
+    const sel = $("voice");
+    const current = sel.value;
+    sel.innerHTML = "";
+    (prefer.length ? prefer : list).forEach((v, i) => {
+      const o = document.createElement("option");
+      o.value = v.name; o.textContent = v.name + " · " + v.lang;
+      if (i === 0 && !current) o.selected = true;
+      sel.appendChild(o);
+    });
+    if (current) sel.value = current;
+  }
+  speechSynthesis.onvoiceschanged = voices;
+  voices();
+
+  function speak(txt) {
+    if (!window.speechSynthesis) { if (autoListen) startListening(); return; }
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(txt);
+    const name = $("voice").value;
+    const v = (speechSynthesis.getVoices() || []).find((x) => x.name === name);
+    if (v) u.voice = v;
+    u.lang = $("lang").value;
+    u.rate = 1.03;
+    speaking = true; mic.classList.add("speaking");
+    u.onend = () => { speaking = false; mic.classList.remove("speaking"); if (autoListen) startListening(); };
+    speechSynthesis.speak(u);
+  }
+
+  async function ask(message) {
+    if (!message.trim() || busy) return;
+    busy = true;
+    text.value = "";
+    add("me", message);
+    const bot = add("bot", "…");
+    const bubble = bot.querySelector(".bubble");
+    answerText = "";
+    try {
+      const res = await fetch("/api/chat/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-assistant-key": key },
+        body: JSON.stringify({ session_id: sessionId, message }),
+      });
+      if (res.status === 401) { showGate("Assistant key rejected."); busy = false; return; }
+      if (!res.ok || !res.body) throw new Error("HTTP " + res.status);
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() || "";
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data:")) continue;
+          let ev; try { ev = JSON.parse(line.slice(5).trim()); } catch { continue; }
+          if (ev.type === "tool") chip(bot, ev.label || ev.name);
+          else if (ev.type === "answer") { answerText = ev.text; bubble.textContent = ev.text; }
+        }
+      }
+      if (!answerText) bubble.textContent = "No answer came back.";
+    } catch (err) {
+      bubble.textContent = "That did not work: " + err.message;
+    } finally {
+      busy = false;
+      log.scrollTop = log.scrollHeight;
+      if (answerText) speak(answerText);
+    }
+  }
+
+  $("send").onclick = () => ask(text.value);
+  text.addEventListener("keydown", (e) => { if (e.key === "Enter") ask(text.value); });
+  document.querySelectorAll(".quick button").forEach((b) => (b.onclick = () => ask(b.dataset.q)));
+
+  function showGate(message) {
+    $("gate").style.display = "grid";
+    $("gateErr").textContent = message || "";
+  }
+  $("unlock").onclick = async () => {
+    key = $("key").value.trim();
+    const res = await fetch("/api/session", { method: "POST", headers: { "x-assistant-key": key } });
+    if (res.status !== 200) { $("gateErr").textContent = "That key did not work."; return; }
+    localStorage.setItem("backstage_key", key);
+    const data = await res.json();
+    sessionId = data.session_id;
+    $("gate").style.display = "none";
+    add("bot", data.greeting);
+  };
+
+  (async function boot() {
+    if (!key) { showGate(""); return; }
+    const res = await fetch("/api/session", { method: "POST", headers: { "x-assistant-key": key } });
+    if (res.status !== 200) { showGate("Your saved key is no longer valid."); return; }
+    const data = await res.json();
+    sessionId = data.session_id;
+    $("gate").style.display = "none";
+    add("bot", data.greeting);
+  })();
+})();
+</script>
+</body>
+</html>
