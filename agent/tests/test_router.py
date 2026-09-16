@@ -40,6 +40,12 @@ def test_unroutable_questions_fall_through():
     assert router._route("why did we choose this theme?") is None
 
 
+def test_arrival_questions_split_between_inside_and_outstanding():
+    assert router._route("how many arrived")[0] == "checkin_status"
+    assert router._route("who hasn't arrived yet")[0] == "unchecked_families"
+    assert router._route("anyone still to arrive?")[0] == "unchecked_families"
+
+
 def test_templates_are_grammatical_and_hide_zeros():
     rsvp = {"total": 467, "attending": 1, "declined": 0, "awaiting_reply": 466, "expected_guests": 2}
     text = router._template("rsvp_report", rsvp, "who replied")
@@ -65,6 +71,13 @@ def test_templates_are_grammatical_and_hide_zeros():
     }
     text = router._template("find_family", found, "find Ayaansh Rai")
     assert "1 guest" in text and "nobody checked in yet" in text
+
+
+def test_unchecked_template_reports_the_total_not_the_page():
+    result = {"families": [{"name": "AARADHYA", "class_name": "5TH DAISY"}], "showing": 1, "total": 463}
+    text = router._template("unchecked_families", result, "who hasn't arrived")
+    assert "463 families" in text
+    assert "AARADHYA" in text
 
 
 def test_identity_clause_omits_unset_fields():

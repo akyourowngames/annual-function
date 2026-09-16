@@ -36,6 +36,12 @@ INTENTS: list[tuple[str, str, str | None]] = [
     ("what_needs_attention", r"\b(attention|problem|issue|worry|risk|kya dekh|kya karu)\b", None),
     ("rsvp_report", r"\b(rsvp|replied|replies|response|confirm|confirmed|kitne log|kitni family)\b", None),
     ("reachability", r"\b(reach|reachable|contact|telegram|whatsapp|unreachable)\b", None),
+    (
+        "unchecked_families",
+        r"\b(not arrived|haven'?t arrived|hasn'?t arrived|have not arrived|"
+        r"unchecked|pending arrival|still to arrive|yet to arrive|nahi aay[ae])\b",
+        None,
+    ),
     ("checkin_status", r"\b(arriv|arrived|check-?in|checked|gate|entry|enter|aa gaye)\b", None),
     ("album_status", r"\b(photo|photos|album|gallery|picture|tasveer)\b", None),
     ("open_tickets", r"\b(ticket|tickets|request|requests|complaint|complaints|support)\b", None),
@@ -107,6 +113,11 @@ async def _speak(name: str, result: dict[str, Any], message: str) -> tuple[str, 
     if config.PHRASE_MODE != "template" and llm.chain() and not result.get("error"):
         try:
             payload = json.dumps(_pruned(result) or {}, default=str)
+            if payload == "{}":
+                # Everything was zero. Hand the model the raw numbers with a flag
+                # so it can answer "nobody has arrived yet" instead of "nothing to
+                # report" — a zero is the answer here, not noise.
+                payload = json.dumps({"all_zero": True, "data": result}, default=str)
             out, model = await llm.complete(
                 [
                     {"role": "system", "content": PHRASE_PROMPT},
@@ -151,7 +162,14 @@ async def try_handle(message: str, ctx: Ctx) -> dict[str, Any] | None:
 # fallback templates — only used when no model is reachable
 # --------------------------------------------------------------------------
 def _plural(n: int, word: str) -> str:
-    return f"{n} {word}" if n == 1 else f"{n} {word}s"
+    """Enough English for the words we actually use (family, entry, pass, ...)."""
+    if n == 1:
+        return f"{n} {word}"
+    if word.endswith("y") and not word.endswith(("ay", "ey", "oy", "uy")):
+        return f"{n} {word[:-1]}ies"
+    if word.endswith(("s", "x", "ch", "sh")):
+        return f"{n} {word}es"
+    return f"{n} {word}s"
 
 
 def _template(name: str, result: dict[str, Any], message: str) -> str | None:
@@ -233,6 +251,15 @@ def _template(name: str, result: dict[str, Any], message: str) -> str | None:
         if gates:
             line += " " + ", ".join(f"{g['gate']} {g['entries']}" for g in gates[:3]) + "."
         return line
+
+    if name == "unchecked_families":
+        families = result.get("families") or []
+        total = int(result.get("total") or len(families))
+        if not total:
+            return "Nobody is outstanding — every active family has arrived."
+        names = ", ".join(f"{f['name']} ({f['class_name'] or 'no class'})" for f in families[:5])
+        more = "" if len(families) <= 5 else f", and {len(families) - 5} more shown"
+        return f"{_plural(total, 'family')} still to arrive. First up: {names}{more}."
 
     if name == "album_status":
         approved = result.get("approved") or 0

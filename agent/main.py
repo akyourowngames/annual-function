@@ -92,6 +92,68 @@ async def _execute_pending(pending: dict[str, Any]) -> str:
         if kind == "check_in":
             out = await actions.check_in_family(pending["code"])
             return f"Checked in {out['checked_in']} for {out.get('student') or out['code']}."
+        if kind == "guest_limit":
+            out = await actions.set_guest_limit(
+                scope=pending.get("scope", "all"),
+                class_name=pending.get("className"),
+                limit=int(pending.get("limit") or 0),
+            )
+            skipped = out.get("skipped") or []
+            line = f"Guest limit set to {out['limit']} for {out['updated']} students."
+            if skipped:
+                line += f" {len(skipped)} were skipped because they already have more guests than that."
+            return line
+        if kind == "send_invitations":
+            out = await actions.send_invitations(
+                scope=pending.get("scope", "all"), class_name=pending.get("className")
+            )
+            line = f"Sent {out['sent']} invitation passes."
+            if out.get("failed"):
+                line += f" {out['failed']} failed."
+            if out.get("remaining"):
+                line += f" {out['remaining']} are still queued."
+            return line
+        if kind == "create_student":
+            out = await actions.create_student(
+                admission=pending["admission"],
+                name=pending["name"],
+                class_name=pending["className"],
+                guest_limit=pending.get("guestLimit"),
+            )
+            return (
+                f"Added {out['name']}, admission {out['admission']}, class {out['className']}. "
+                f"Invitation code {out.get('code')}. Nothing has been sent."
+            )
+        if kind == "regenerate_pass":
+            out = await actions.regenerate_pass(pending["code"])
+            return (
+                f"Done. The new code is {out['code']}. "
+                f"The old code {out['oldCode']} no longer works."
+            )
+        if kind == "invitation_status":
+            out = await actions.set_invitation_status(pending["code"], bool(pending.get("active")))
+            return f"The pass is now {out.get('status') or ('active' if pending.get('active') else 'disabled')}."
+        if kind == "add_guest":
+            out = await actions.add_guest(
+                pending["code"], pending["name"], pending.get("relationship")
+            )
+            registered = out.get("registered")
+            remaining = out.get("remaining")
+            return (
+                f"Added {out['name']}. {registered} "
+                f"{'guest' if registered == 1 else 'guests'} registered, {remaining} "
+                f"{'seat' if remaining == 1 else 'seats'} left."
+            )
+        if kind == "remove_guest":
+            out = await actions.remove_guest(pending["code"], pending["guestName"])
+            return f"Removed {out['removed']} from {out['code']}."
+        if kind == "resend_pass":
+            out = await actions.resend_pass(pending["code"])
+            if out.get("sent"):
+                return f"Sent their pass just now ({out['code']})."
+            if out.get("unreachable"):
+                return "I could not reach that family on chat yet, so nothing was sent."
+            return f"That did not send: {out.get('failed', 0)} failed."
         return "I do not know how to do that."
     except Exception as exc:  # noqa: BLE001
         return f"That did not go through: {exc}"
@@ -113,7 +175,7 @@ async def run_turn(session_id: str, message: str, emit: Emit) -> dict[str, Any]:
         return {"text": reply, "tools": ["confirm"], "model": "actions"}
     if pending and sessions.negative(message):
         session["pending"] = None
-        reply = "Cancelled. Nothing was sent."
+        reply = "Cancelled. Nothing was changed."
         sessions.remember(session, "assistant", reply)
         await emit({"type": "answer", "text": reply, "tools": [], "model": "actions"})
         return {"text": reply, "tools": [], "model": "actions"}

@@ -48,6 +48,11 @@ PHRASE_PROMPT = """You turn raw event data into one spoken answer for an organiz
 - Answer in English. One or two sentences at most. No markdown, no lists, no emoji.
 - Use only the numbers and names present in the data. Never invent one.
 - Skip anything that is zero or empty — say nothing about it instead of "zero".
+- If the data contains "all_zero": true, then every number is at zero. Say that
+  in one short sentence ("nobody has arrived yet", "no photos waiting") — never
+  list the zeros one by one.
+- If the data has "total", that is the full count that matched — say that. Never
+  use the number of items in a list as the count.
 - If the data is empty or an error, say in one line that there is nothing to report."""
 
 

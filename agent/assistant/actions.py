@@ -101,3 +101,116 @@ async def check_in_family(code: str) -> dict[str, Any]:
         except Exception:  # noqa: BLE001 — stop at the first refusal
             break
     return {"checked_in": checked, "student": invitation.get("studentName"), "code": code}
+
+
+async def set_guest_limit(
+    *, scope: str, class_name: str | None = None, limit: int
+) -> dict[str, Any]:
+    """Change the guest allowance for everyone, or for one class."""
+    payload: dict[str, Any] = {"guestLimit": int(limit)}
+    if scope == "class" and class_name:
+        payload["className"] = class_name
+    else:
+        payload["audience"] = "all"
+    res = await _call("PATCH", "/api/admin", payload)
+    invitation = res.get("invitation") or {}
+    return {
+        "updated": int(invitation.get("updated") or 0),
+        "skipped": invitation.get("skipped") or [],
+        "limit": int(limit),
+    }
+
+
+async def send_invitations(*, scope: str, class_name: str | None = None) -> dict[str, Any]:
+    """Bulk-send passes to everyone, or to one class (batched, like the UI)."""
+    audience = f"class:{class_name}" if scope == "class" and class_name else "all"
+    sent = failed = remaining = 0
+    guard = 0
+    while guard < 80:
+        res = await _call("POST", "/api/admin/deliver", {"audience": audience})
+        result = res.get("result") or {}
+        sent += int(result.get("sent") or 0)
+        failed += int(result.get("failed") or 0)
+        remaining = int(result.get("remaining") or 0)
+        if remaining <= 0:
+            break
+        guard += 1
+    return {"sent": sent, "failed": failed, "remaining": remaining, "audience": audience}
+
+
+async def create_student(
+    *, admission: str, name: str, class_name: str, guest_limit: int | None = None
+) -> dict[str, Any]:
+    """Add a student and their invitation record. Nothing is ever sent."""
+    payload: dict[str, Any] = {
+        "admissionNumber": admission,
+        "name": name,
+        "className": class_name,
+    }
+    if guest_limit is not None:
+        payload["guestLimit"] = int(guest_limit)
+    res = await _call("POST", "/api/invitations", payload)
+    student = res.get("student") or {}
+    invitation = res.get("invitation") or {}
+    return {
+        "name": student.get("name") or name,
+        "admission": student.get("admissionNumber") or admission,
+        "className": student.get("className") or class_name,
+        "code": invitation.get("code"),
+        "guestLimit": invitation.get("guestLimit"),
+        "created": bool(res.get("created")),
+        "sent": False,
+    }
+
+
+async def regenerate_pass(code: str) -> dict[str, Any]:
+    """Replace a leaked or lost pass. The old code stops working."""
+    res = await _call("PATCH", "/api/admin", {"code": code, "regenerate": True})
+    invitation = res.get("invitation") or {}
+    return {"oldCode": code, "code": invitation.get("invitationCode") or ""}
+
+
+async def set_invitation_status(code: str, active: bool) -> dict[str, Any]:
+    res = await _call(
+        "PATCH", "/api/admin", {"code": code, "status": "active" if active else "disabled"}
+    )
+    return {"code": code, "status": (res.get("invitation") or {}).get("status")}
+
+
+async def add_guest(code: str, name: str, relationship: str | None = None) -> dict[str, Any]:
+    payload: dict[str, Any] = {"code": code, "name": name}
+    if relationship:
+        payload["relationship"] = relationship
+    res = await _call("POST", "/api/guests", payload)
+    return {
+        "name": (res.get("guest") or {}).get("name") or name,
+        "code": code,
+        "registered": res.get("registered"),
+        "remaining": res.get("remaining"),
+    }
+
+
+async def remove_guest(code: str, guest_name: str) -> dict[str, Any]:
+    """Remove a guest by name — resolved against the invitation's own list."""
+    invitation = await _call("GET", f"/api/invitations?code={code}")
+    guests = invitation.get("guests") or []
+    wanted = (guest_name or "").strip().lower()
+    matches = [g for g in guests if wanted and wanted in (g.get("name") or "").lower()]
+    if not matches:
+        raise RuntimeError(f"No guest called {guest_name} is on {code}")
+    if len(matches) > 1:
+        raise RuntimeError(f"More than one guest on {code} matches {guest_name}")
+    guest = matches[0]
+    await _call("DELETE", "/api/guests", {"code": code, "guestId": guest["id"]})
+    return {"code": code, "removed": guest.get("name")}
+
+
+async def resend_pass(code: str) -> dict[str, Any]:
+    res = await _call("POST", "/api/admin/deliver", {"codes": [code]})
+    result = res.get("result") or {}
+    return {
+        "code": code,
+        "sent": int(result.get("sent") or 0),
+        "failed": int(result.get("failed") or 0),
+        "unreachable": int(result.get("unreachable") or 0),
+    }
