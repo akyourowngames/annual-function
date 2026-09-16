@@ -4,6 +4,7 @@ export type Inbound = {
   text: string;
   buttonId?: string;
   media?: { id: string; mime: string; caption: string };
+  audio?: { id: string; mime: string };
 };
 
 // Walk a Meta webhook payload, return one inbound per incoming user message.
@@ -25,6 +26,7 @@ export function parseWebhookBody(body: unknown): Inbound[] {
           type?: string;
           text?: { body?: string };
           image?: { id?: string; mime_type?: string; caption?: string };
+          audio?: { id?: string; mime_type?: string };
           interactive?: { button_reply?: { id?: string }; list_reply?: { id?: string } };
         };
         if (typeof msg?.from !== "string") continue;
@@ -42,6 +44,12 @@ export function parseWebhookBody(body: unknown): Inbound[] {
               mime: msg.image.mime_type || "image/jpeg",
               caption: msg.image.caption || "",
             },
+          });
+        } else if (msg.type === "audio" && typeof msg.audio?.id === "string") {
+          out.push({
+            waId: msg.from,
+            text: "",
+            audio: { id: msg.audio.id, mime: msg.audio.mime_type || "audio/ogg" },
           });
         }
       }

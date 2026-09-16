@@ -155,6 +155,7 @@ describe("whatsapp menu", () => {
               { from: "918888888888", type: "interactive", interactive: { button_reply: { id: "invite", title: "Get invitation" } } },
               { from: "917777777777", type: "interactive", interactive: { list_reply: { id: "faq", title: "Ask" } } },
               { from: "919999999999", type: "image", image: { id: "x" } },
+              { from: "916666666666", type: "audio", audio: { id: "a1" } },
             ],
           },
         }],
@@ -165,6 +166,7 @@ describe("whatsapp menu", () => {
       { waId: "918888888888", text: "", buttonId: "invite" },
       { waId: "917777777777", text: "", buttonId: "faq" },
       { waId: "919999999999", text: "", media: { id: "x", mime: "image/jpeg", caption: "" } },
+      { waId: "916666666666", text: "", audio: { id: "a1", mime: "audio/ogg" } },
     ]);
   });
   it("offers invitation vs question with numbered fallback", () => {

@@ -8,6 +8,7 @@ import type { NewWhatsappSession } from "@/lib/db/schema";
 
 export type TelegramInbound = { chatId: string; text: string };
 export type TelegramMedia = { chatId: string; fileId: string; caption: string; mime: string };
+export type TelegramVoice = { chatId: string; fileId: string; mime: string; duration: number };
 
 export type TelegramHandlerDeps = {
   now: () => Date;
@@ -87,6 +88,27 @@ export function parseTelegramMedia(update: unknown): TelegramMedia | null {
   if (typeof doc?.file_id === "string" && typeof doc.mime_type === "string" && doc.mime_type.startsWith("image/"))
     return { chatId, fileId: doc.file_id, caption, mime: doc.mime_type };
   return null;
+}
+
+// Voice notes (and audio files) get transcribed and then run through the exact
+// same handler as typed text. Stickers, video notes, calls etc. parse to null.
+export function parseTelegramVoice(update: unknown): TelegramVoice | null {
+  const msg = (update as {
+    message?: {
+      chat?: { id?: unknown };
+      voice?: { file_id?: unknown; mime_type?: unknown; duration?: unknown };
+      audio?: { file_id?: unknown; mime_type?: unknown; duration?: unknown };
+    };
+  })?.message;
+  if (!msg?.chat || msg.chat.id == null) return null;
+  const clip = msg.voice ?? msg.audio;
+  if (!clip || typeof clip.file_id !== "string") return null;
+  return {
+    chatId: String(msg.chat.id),
+    fileId: clip.file_id,
+    mime: typeof clip.mime_type === "string" ? clip.mime_type : "audio/ogg",
+    duration: typeof clip.duration === "number" ? clip.duration : 0,
+  };
 }
 
 function payloadOf(raw: unknown): SessionPayload {

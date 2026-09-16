@@ -10,6 +10,7 @@ import {
 } from "@/lib/server/whatsapp/client";
 import { loadSession } from "@/lib/server/whatsapp/session";
 import { saveIncomingPhoto } from "@/lib/server/album";
+import { heardPrefix, transcribe, voiceReady } from "@/lib/server/telegram/voice";
 
 // Agent calls can take several seconds; give the function room.
 export const maxDuration = 60;
@@ -42,7 +43,38 @@ export async function POST(req: Request) {
   // Per-message try/catch + always 200: Meta retries aggressively on
   // non-2xx, so a poison message must not wedge the whole batch.
   for (const inbound of parseWebhookBody(body)) {
+    const deps = {
+      ...liveDeps,
+      sendText: (to: string, text: string) => sendTextWithTemplateFallback(to, text),
+      sendPass: async (to: string, pdf: Buffer, filename: string, caption: string) => {
+        const mediaId = await uploadMedia(pdf, filename);
+        await sendDocument(to, mediaId, filename, caption);
+      },
+    };
     try {
+      // Voice notes: transcribe, show what we heard, then the same brain.
+      if (inbound.audio) {
+        if (!voiceReady()) {
+          await sendTextWithTemplateFallback(
+            inbound.waId,
+            "Voice notes aren’t available right now — please type your message.",
+          );
+          continue;
+        }
+        const { bytes, mime } = await downloadMedia(inbound.audio.id);
+        const text = await transcribe(bytes, mime);
+        if (!text) {
+          await sendTextWithTemplateFallback(
+            inbound.waId,
+            "I couldn’t make out that voice note — please type it instead.",
+          );
+          continue;
+        }
+        const heard = heardPrefix(text);
+        if (heard) await sendTextWithTemplateFallback(inbound.waId, heard);
+        await handleInbound({ waId: inbound.waId, text }, deps);
+        continue;
+      }
       if (inbound.media) {
         const { bytes, mime } = await downloadMedia(inbound.media.id);
         const session = await loadSession(`wa:${inbound.waId}`);
@@ -62,14 +94,7 @@ export async function POST(req: Request) {
         );
         continue;
       }
-      await handleInbound(inbound, {
-        ...liveDeps,
-        sendText: (to, text) => sendTextWithTemplateFallback(to, text),
-        sendPass: async (to, pdf, filename, caption) => {
-          const mediaId = await uploadMedia(pdf, filename);
-          await sendDocument(to, mediaId, filename, caption);
-        },
-      });
+      await handleInbound(inbound, deps);
     } catch (e) {
       console.error("whatsapp inbound failed", inbound.waId, e);
     }

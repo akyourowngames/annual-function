@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireStaff } from "@/lib/server/auth";
-import { body, fail, sameOrigin, text } from "@/lib/server/http";
+import { body, fail, HttpError, sameOrigin, text } from "@/lib/server/http";
 import { parseAudience } from "@/lib/server/channels";
-import { deliverInvitations, recipientsForAudience } from "@/lib/server/delivery";
+import { deliverInvitations, deliverToCodes, recipientsForAudience } from "@/lib/server/delivery";
 
 export const maxDuration = 60;
 
@@ -25,6 +25,13 @@ export async function POST(request: Request) {
     sameOrigin(request);
     await requireStaff(true);
     const b = await body(request);
+    // Specific families (a one-off resend from the workspace or the assistant).
+    if (Array.isArray(b.codes)) {
+      const codes = b.codes.map((c) => text(c, "Invitation code", 64).toUpperCase());
+      if (!codes.length) throw new HttpError("Choose at least one student.");
+      if (codes.length > 50) throw new HttpError("Send to at most 50 families at a time.");
+      return NextResponse.json({ result: await deliverToCodes(codes) });
+    }
     const audience = parseAudience(text(b.audience ?? "all", "Audience", 120));
     const result = await deliverInvitations({
       audience,

@@ -4,8 +4,10 @@ import {
   liveDeps,
   parseTelegramMedia,
   parseTelegramUpdate,
+  parseTelegramVoice,
 } from "@/lib/server/telegram/handler";
 import { downloadFile, sendDocument, sendMessage } from "@/lib/server/telegram/client";
+import { heardPrefix, tooLong, transcribe, voiceReady } from "@/lib/server/telegram/voice";
 import { loadSession } from "@/lib/server/whatsapp/session";
 import { saveIncomingPhoto } from "@/lib/server/album";
 
@@ -37,6 +39,49 @@ export async function POST(req: Request) {
       await handleTelegramInbound(inbound, { ...liveDeps, sendMessage, sendDocument });
     } catch (e) {
       console.error("telegram inbound failed", inbound.chatId, e);
+    }
+    return NextResponse.json({ ok: true });
+  }
+  // Voice notes: transcribe with Whisper, show what we heard, then hand the
+  // text to the same brain the typed messages use.
+  const voice = parseTelegramVoice(body);
+  if (voice) {
+    try {
+      if (!voiceReady()) {
+        await sendMessage(
+          voice.chatId,
+          "Voice notes aren’t available right now — please type your message.",
+        );
+      } else if (tooLong(voice.duration)) {
+        await sendMessage(
+          voice.chatId,
+          "That voice note is a little long — please keep it under three minutes, or type it.",
+        );
+      } else {
+        const { bytes } = await downloadFile(voice.fileId);
+        const text = await transcribe(bytes, voice.mime);
+        if (!text) {
+          await sendMessage(
+            voice.chatId,
+            "I couldn’t make out that voice note — please type it instead.",
+          );
+        } else {
+          // Show the transcript first: if Whisper misheard, the family can see
+          // it and correct themselves in the next message.
+          const heard = heardPrefix(text);
+          if (heard) await sendMessage(voice.chatId, heard);
+          await handleTelegramInbound(
+            { chatId: voice.chatId, text },
+            { ...liveDeps, sendMessage, sendDocument },
+          );
+        }
+      }
+    } catch (e) {
+      console.error("telegram voice failed", voice.chatId, e);
+      await sendMessage(
+        voice.chatId,
+        "I couldn’t hear that one — please try again, or type it.",
+      ).catch(() => {});
     }
     return NextResponse.json({ ok: true });
   }

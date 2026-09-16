@@ -79,6 +79,15 @@ Requires `SUPABASE_SERVICE_ROLE_KEY` (server-only) in the environment; the bucke
 
 `/gallery` is a standalone public page — no login, linked from the landing footer and from the **Photo album** link in the student portal sidebar. It renders only when staff publish it (**Staff workspace → Gallery → Publish gallery**, stored as `event_settings.gallery_enabled`, off by default). Even then it shows **approved photos only**, served as short-lived signed URLs from the private bucket; pending and hidden photos are never exposed. Unpublishing takes the page dark within a refresh (visitors see "the album isn't open yet"). Moderating (approve/hide/delete) requires staff; publishing requires an administrator.
 
+## Voice notes (Telegram + WhatsApp)
+
+Families can speak instead of typing. An inbound voice note is downloaded, transcribed with **Groq Whisper** (`whisper-large-v3-turbo`), and the transcript is handed to the **same** chat handler as typed text — so menus, invitation verification, RSVP, guest actions and escalation all work unchanged.
+
+- Key: `GROQ_VOICE_API_KEY` in the **web** environment. Deliberately a different key from the organizers' assistant (`agent/.env`), so the family-facing bot has its own quota. `GROQ_VOICE_MODEL` selects the model.
+- The bot replies **`Heard: “…”`** before the answer so a mis-hearing is visible and the family can correct it. Set `TELEGRAM_SHOW_TRANSCRIPT=0` to hide it.
+- Telegram and WhatsApp both send OGG/Opus, which Whisper accepts directly — no conversion. Clips longer than three minutes are declined politely.
+- If transcription is unavailable or the audio is unintelligible, the bot asks them to type instead. A failed note never wedges the webhook.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push/PR: lint, `tsc --noEmit`, the unit suite, and a production build (placeholder env — no database needed). A `smoke` job runs `scripts/smoke.mjs` against the deployed app when the `SMOKE_URL` repository secret is set, and skips otherwise. Run it locally with `SMOKE_URL=https://annual-five.vercel.app node scripts/smoke.mjs`.
