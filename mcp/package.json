@@ -1,0 +1,18 @@
+{
+  "name": "annual-function-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Read and report on the school function, and make a small set of safe changes, for the Ankita assistant.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "print-config": "node scripts/print-mcp-config.mjs",
+    "test": "node --test \"tests/*.mjs\""
+  },
+  "dependencies": {
+    "postgres": "^3.4.9"
+  }
+}

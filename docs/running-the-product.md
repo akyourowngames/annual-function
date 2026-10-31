@@ -11,10 +11,13 @@ For an existing database with the original schema, apply the additive updates:
 ```sh
 node scripts/migrate-product.mjs
 node scripts/migrate-landing.mjs
+node scripts/migrate.mjs drizzle/migrations/0004_family_verification.sql
 npm run dev
 ```
 
-For a new database, apply `drizzle/migrations/0000_melted_veda.sql` first. The two scripts above are idempotent and preserve existing event and invitation records. They are explicit operational migrations; the original Drizzle journal currently tracks only the initial schema.
+For a new database, apply `drizzle/migrations/0000_melted_veda.sql` first. The scripts above are idempotent and preserve existing event and invitation records. They are explicit operational migrations; the original Drizzle journal currently tracks only the initial schema.
+
+Family verification needs two server-only secrets (never `NEXT_PUBLIC_`). Generate each with `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"` and set `FAMILY_SESSION_SECRET` and `FAMILY_OTP_SECRET` in `web/.env.local` (and in Vercel for production). Production also requires `TELEGRAM_WEBHOOK_SECRET`; the webhook now fails closed without it.
 
 The normal preview is http://localhost:3000. If another development server is using that build directory, `node scripts/preview-server.mjs` starts an isolated preview at http://127.0.0.1:3100.
 

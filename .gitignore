@@ -37,6 +37,23 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Local testing notes — contains live codes and access keys. Never commit.
+# (The test data itself is synthetic, but the staff keys in here are real.)
+demo.md
+
+# Editor / agent tool state. Machine-specific paths (C:/Users/<name>/...) and
+# per-session permission grants; no value to anyone else.
+.commandcode/
+.qoder/
+.mcp.json
+.mcp.json.bak-*
+
+# The MCP helper's own secrets: a live DATABASE_URL and a real account
+# password. The web/.gitignore rule only covers web/, not this folder.
+mcp/.env
+mcp/.env.local
+mcp/.env*.local
+
 # python / agent
 .venv/
 __pycache__/

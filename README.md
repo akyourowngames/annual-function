@@ -98,6 +98,26 @@ Rules of the house:
 2. **QR codes carry an opaque token**, never names or admission numbers.
 3. **One student, one invitation.** Codes are unique, regenerable, and
    revocable.
+4. **A code is not an identity.** Family data needs the invitation code *and* a
+   6-digit OTP sent to a contact the school has verified. See
+   [`docs/security/04-family-verification.md`](docs/security/04-family-verification.md).
+5. **Admissions are atomic.** A guest can only be checked in once, enforced by a
+   transaction lock and a database unique index.
+
+## 🔐 Security
+
+The full assessment, threat model, findings and verification architecture live in
+[`docs/security/`](docs/security/):
+
+- [`01-attack-surface.md`](docs/security/01-attack-surface.md)
+- [`02-threat-model.md`](docs/security/02-threat-model.md)
+- [`03-findings.md`](docs/security/03-findings.md)
+- [`04-family-verification.md`](docs/security/04-family-verification.md)
+- [`05-final-report.md`](docs/security/05-final-report.md)
+
+Before deploying the verification flow, apply
+`web/drizzle/migrations/0004_family_verification.sql` and set
+`FAMILY_SESSION_SECRET` / `FAMILY_OTP_SECRET` (see `web/.env.example`).
 
 ## 📁 The map
 
