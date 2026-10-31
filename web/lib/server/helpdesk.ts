@@ -549,6 +549,14 @@ Official information: ${JSON.stringify(official)}. Connected invitation: ${JSON.
     };
   } catch (e) {
     if (e instanceof HttpError && e.status === 429) throw e;
+    // Log the reason before falling back. Swallowing it silently meant a
+    // broken model looked identical to "no model configured", and the only
+    // symptom in production was a generic "assistant unavailable" reply with
+    // nothing in the function logs to explain it. Name only, never the payload.
+    console.error(
+      "helpdesk model call failed:",
+      e instanceof Error ? `${e.name}: ${e.message}` : "unknown error",
+    );
     return fallback();
   }
 }

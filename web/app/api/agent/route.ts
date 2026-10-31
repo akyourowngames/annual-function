@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { answerQuestion } from "@/lib/server/helpdesk";
-import { hasLlmKey } from "@/lib/server/llm-client";
+import { hasLlmKey, chatCompletion, llmConfig, messageText } from "@/lib/server/llm-client";
 import { body, fail, HttpError, sameOrigin, text } from "@/lib/server/http";
 import { recoverInvitation } from "@/lib/server/invitation-recovery";
 import { parseRecoveryMessage } from "@/lib/invitations/identity";
@@ -38,11 +38,40 @@ async function limitQuestions(key: string) {
 }
 
 export const maxDuration = 60;
+
+/**
+ * Health probe for the assistant. Reports whether a model key is present and
+ * whether a real call succeeds, so a broken provider is visible from outside
+ * without reading function logs. Never returns the key or its length.
+ */
 export async function GET() {
-  return NextResponse.json({
+  const configured = hasLlmKey();
+  const result: Record<string, unknown> = {
     ok: true,
-    mode: hasLlmKey() ? "ai" : "official_information",
-  });
+    mode: configured ? "ai" : "official_information",
+    model: llmConfig().model,
+    baseUrl: llmConfig().baseUrl,
+  };
+  if (configured) {
+    const started = Date.now();
+    try {
+      const probe = await chatCompletion(
+        {
+          messages: [{ role: "user", content: "Reply with exactly: OK" }],
+          max_tokens: 16,
+        },
+        12_000,
+      );
+      const text = messageText(probe.choices?.[0]?.message?.content).trim();
+      result.probe = text ? "ok" : "empty_response";
+      result.probeMs = Date.now() - started;
+    } catch (e) {
+      result.probe = "failed";
+      result.probeMs = Date.now() - started;
+      result.probeError = e instanceof Error ? `${e.name}: ${e.message}` : "unknown";
+    }
+  }
+  return NextResponse.json(result);
 }
 export async function POST(request: Request) {
   try {
