@@ -35,7 +35,9 @@ describe("llm-client", () => {
   });
   it("defaults base URL to the Kilo gateway and strips trailing slash", () => {
     delete process.env.LLM_BASE_URL;
-    assert.equal(llmConfig().baseUrl, "https://api.kilo.ai/api/gateway");
+    // The working gateway address (api.kilo.ai/api/gateway returns 404 for
+    // chat completions; ai-gateway.kilo.ai/api/v1 is the correct one).
+    assert.equal(llmConfig().baseUrl, "https://ai-gateway.kilo.ai/api/v1");
     process.env.LLM_BASE_URL = "https://gateway.example.com/v1/";
     assert.equal(llmConfig().baseUrl, "https://gateway.example.com/v1");
   });
@@ -75,7 +77,7 @@ describe("chatCompletion", () => {
     assert.equal(body.model, "custom-model");
     assert.deepEqual(body.messages, [{ role: "user", content: "hi" }]);
   });
-  it("falls back to OPENAI_MODEL and then the free default model", async () => {
+  it("falls back to OPENAI_MODEL and then the fast default model", async () => {
     process.env.LLM_BASE_URL = "https://gateway.example.com/v1";
     process.env.LLM_API_KEY = "test-key";
     delete process.env.LLM_MODEL;
@@ -84,7 +86,10 @@ describe("chatCompletion", () => {
     assert.equal(JSON.parse(seen.init.body).model, "gpt-x");
     delete process.env.OPENAI_MODEL;
     await chatCompletion({ messages: [] });
-    assert.equal(JSON.parse(seen.init.body).model, "kilo-auto/free");
+    // The default must be a fixed model that returns real text quickly and
+    // consistently. It was kilo-auto/* — an auto-router whose latency ranged
+    // 1.25s–23.6s on the same question. north-mini-code measured 1.0s–1.4s.
+    assert.equal(JSON.parse(seen.init.body).model, "cohere/north-mini-code:free");
   });
   it("fails over to the next model when one errors", async () => {
     process.env.LLM_API_KEY = "test-key";

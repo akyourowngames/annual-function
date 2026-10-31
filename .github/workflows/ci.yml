@@ -37,6 +37,13 @@ jobs:
           scripts/telegram-test.mjs
           scripts/whatsapp-handler-test.mjs
           scripts/identity-test.mjs
+          scripts/security-unit-test.mjs
+          scripts/verify-contract-test.mjs
+          scripts/otp-limits-test.mjs
+          scripts/no-hardcoded-replies-test.mjs
+          scripts/llm-tuning-test.mjs
+          scripts/chat-dead-ends-test.mjs
+          scripts/audit-retention-test.mjs
 
   agent:
     name: Backstage assistant (python)
@@ -70,6 +77,8 @@ jobs:
           NEXT_TELEMETRY_DISABLED: "1"
           ADMIN_ACCESS_KEY: ci-placeholder-not-used
         run: npm run build
+      - name: Client bundles must not contain server secrets
+        run: node --test scripts/bundle-secrets-test.mjs
 
   smoke:
     name: Live smoke test

@@ -20,7 +20,7 @@ function fakeDeps(overrides = {}) {
     sendDocument: async (chatId, pdf, filename, caption) => {
       sent.push({ kind: "document", chatId, bytes: pdf.length, filename, caption });
     },
-    recover: async () => ({ recoveredCode: "ABC-123" }),
+    recover: async () => ({ recoveredCode: "ABC-123", passReleaseAllowed: true }),
     answer: async () => ({ reply: "Karyakram shaam 5 baje shuru hoga.", action: null }),
     usage: async () => ({
       invitation: { invitationCode: "ABC-123", qrToken: "qr-1", guestLimit: 2 },
@@ -29,6 +29,8 @@ function fakeDeps(overrides = {}) {
       remaining: 2,
     }),
     createTicket: async () => ({ id: "abcdef12-9999-9999-9999-999999999999", status: "pending" }),
+    // The portal can only send an OTP when the school approved a contact.
+    hasVerifiedContact: async () => true,
     ...overrides,
   };
 }
@@ -44,7 +46,7 @@ describe("telegram handler", () => {
         assert.equal(identity.admissionNumber, "A-123");
         assert.equal(identity.name, "Aarav Sharma");
         assert.equal(identity.className, "5-A");
-        return { recoveredCode: "ABC-123" };
+        return { recoveredCode: "ABC-123", passReleaseAllowed: true };
       },
     });
     await handleTelegramInbound(inbound("1"), d);

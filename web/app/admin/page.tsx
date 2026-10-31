@@ -10,6 +10,7 @@ import Outreach from "@/components/admin/Outreach";
 import Live from "@/components/admin/Live";
 import Album from "@/components/admin/Album";
 import TicketReply from "@/components/admin/TicketReply";
+import FamilyVerification from "@/components/admin/FamilyVerification";
 import { api, formatDate, type TicketInfo } from "@/lib/types";
 type Invitation = {
   id: string;
@@ -57,6 +58,7 @@ const NAV = [
   { id: "invitations", label: "Invitations", icon: "ticket" },
   { id: "guests", label: "Guests", icon: "users" },
   { id: "checkin", label: "Gate check-in", icon: "scan" },
+  { id: "verify", label: "Verify a family", icon: "shield" },
   { id: "outreach", label: "Reach families", icon: "megaphone" },
   { id: "album", label: "Gallery", icon: "camera" },
   { id: "tickets", label: "Support requests", icon: "help" },
@@ -285,7 +287,9 @@ export default function AdminHome() {
   const isAdmin = role === "admin";
   const isGate = role === "gate";
   const navItems = NAV.filter((i) =>
-    isGate ? i.id === "checkin" : (i.id !== "settings" && i.id !== "outreach") || isAdmin,
+    isGate
+      ? i.id === "checkin"
+      : (i.id !== "settings" && i.id !== "outreach" && i.id !== "verify") || isAdmin,
   );
   const canSelect = view === "invitations" && isAdmin;
   const filtered = data?.invitations.filter((i) => matchesSearch(i, search)) || [];
@@ -416,7 +420,9 @@ export default function AdminHome() {
                     ? "The people joining us."
                     : view === "checkin"
                       ? "A warm welcome starts here."
-                      : view === "outreach"
+                      : view === "verify"
+                        ? "Only the right people get in."
+                        : view === "outreach"
                         ? "Every family, in the loop."
                         : view === "album"
                           ? "Every candid moment."
@@ -869,6 +875,7 @@ export default function AdminHome() {
             </section>
           )}
           {view === "checkin" && <Scanner onCheckIn={refresh} />}
+          {view === "verify" && isAdmin && <FamilyVerification />}
           {view === "live" && <Live />}
           {view === "outreach" && isAdmin && <Outreach classes={classes} />}
           {view === "album" && <Album canPublish={isAdmin} />}

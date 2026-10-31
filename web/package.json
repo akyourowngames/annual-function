@@ -8,8 +8,11 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "node scripts/seed.mjs",
+    "migrate:security": "node scripts/migrate.mjs drizzle/migrations/0004_family_verification.sql",
     "test:e2e": "node scripts/product-test.mjs",
     "test:landing": "node scripts/landing-check.mjs",
+    "test:security": "node --test scripts/security-unit-test.mjs",
+    "test:security:live": "node scripts/security-test.mjs",
     "studio": "drizzle-kit studio"
   },
   "dependencies": {
@@ -17,7 +20,7 @@
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "mammoth": "^1.12.3",
-    "next": "16.3.4",
+    "next": "16.4.3",
     "pdf-lib": "^1.17.1",
     "pg": "^8.23.0",
     "postgres": "^3.4.9",
@@ -36,7 +39,7 @@
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
-    "eslint-config-next": "16.3.4",
+    "eslint-config-next": "16.4.3",
     "prettier": "3.9.6",
     "tailwindcss": "^4",
     "typescript": "^5"

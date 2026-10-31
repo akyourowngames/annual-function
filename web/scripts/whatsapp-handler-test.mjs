@@ -20,7 +20,7 @@ function fakeDeps(overrides = {}) {
     sendPass: async (to, pdf, filename, caption) => {
       sent.push({ kind: "pass", to, bytes: pdf.length, filename, caption });
     },
-    recover: async () => ({ recoveredCode: "ABC-123" }),
+    recover: async () => ({ recoveredCode: "ABC-123", passReleaseAllowed: true }),
     answer: async () => ({ reply: "Karyakram shaam 5 baje shuru hoga.", action: null }),
     usage: async () => ({
       invitation: { invitationCode: "ABC-123", qrToken: "qr-1", guestLimit: 2 },
@@ -29,6 +29,8 @@ function fakeDeps(overrides = {}) {
       remaining: 2,
     }),
     createTicket: async () => ({ id: "abcdef12-9999-9999-9999-999999999999", status: "pending" }),
+    // The portal can only send an OTP when the school approved a contact.
+    hasVerifiedContact: async () => true,
     ...overrides,
   };
 }
@@ -68,6 +70,33 @@ describe("whatsapp handler", () => {
     const stored = d.sessions.get("919999999999");
     assert.ok(stored, "expected a session to be stored");
     assert.equal(stored.invitationCode, "ABC-123");
+  });
+  it("never sends the QR pass when the contact is not school-verified", async () => {
+    // Regression: an attacker who knows admission number + name + class used to
+    // receive the family's QR bearer token. The flag now fails closed.
+    const d = fakeDeps({
+      recover: async () => ({ recoveredCode: "ABC-123", passReleaseAllowed: false }),
+    });
+    await handleInbound(inbound("1"), d);
+    await handleInbound(inbound("A-123"), d);
+    await handleInbound(inbound("Aarav Sharma"), d);
+    await handleInbound(inbound("5-A"), d);
+    assert.equal(
+      d.sent.filter((s) => s.kind === "pass").length,
+      0,
+      "no pass PDF may be sent to an unverified contact",
+    );
+    assert.ok(!JSON.stringify(d.sent).includes("qr-1"), "QR token must not leak");
+    assert.match(d.sent.at(-1).body, /portal/i);
+    assert.match(d.sent.at(-1).body, /ABC-123/);
+  });
+  it("fails closed when the recovery result omits the trust flag", async () => {
+    const d = fakeDeps({ recover: async () => ({ recoveredCode: "ABC-123" }) });
+    await handleInbound(inbound("1"), d);
+    await handleInbound(inbound("A-123"), d);
+    await handleInbound(inbound("Aarav Sharma"), d);
+    await handleInbound(inbound("5-A"), d);
+    assert.equal(d.sent.filter((s) => s.kind === "pass").length, 0);
   });
   it("failed verification replies honestly and resets to menu", async () => {
     const d = fakeDeps({ recover: async () => ({ recoveryRequired: true }) });

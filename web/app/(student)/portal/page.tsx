@@ -28,7 +28,13 @@ export default function StudentHome() {
     [eventError, setEventError] = useState(""),
     [data, setData] = useState<InvitationData | null>(null),
     [code, setCode] = useState(""),
+    [stage, setStage] = useState<"code" | "otp">("code"),
+    [otp, setOtp] = useState(""),
+    [otpMessage, setOtpMessage] = useState(""),
+    [destination, setDestination] = useState(""),
+    [checkingSession, setCheckingSession] = useState(true),
     [loading, setLoading] = useState(false),
+    [resendIn, setResendIn] = useState(0),
     [error, setError] = useState("");
   useEffect(() => {
     let alive = true;
@@ -54,19 +60,107 @@ export default function StudentHome() {
     );
     setData(result);
   }, []);
-  async function unlock(e: React.FormEvent) {
-    e.preventDefault();
+  // Resume an existing verified session (cookie is HttpOnly; the server decides).
+  useEffect(() => {
+    let alive = true;
+    api<{ verified: boolean; code?: string }>("/api/family/session")
+      .then(async (r) => {
+        if (!alive || !r.verified || !r.code) return;
+        try {
+          await load(r.code);
+          setCode(r.code);
+        } catch {
+          /* expired or revoked — fall back to verification */
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (alive) setCheckingSession(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [load]);
+  // Count the resend cooldown down once per second so the family sees why the
+  // button is disabled instead of silently retyping their code.
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const timer = setInterval(() => setResendIn((s) => (s <= 1 ? 0 : s - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [resendIn]);
+  async function beginVerify(value: string) {
     setLoading(true);
     setError("");
+    setOtpMessage("");
+    const normalized = value.trim().toUpperCase();
+    setCode(normalized);
     try {
-      await load(code.trim().toUpperCase());
+      const r = await api<{
+        nextStep: "enter_otp" | "contact_teacher";
+        message: string;
+        destination?: string;
+        retryAfterSeconds?: number;
+      }>("/api/family/verify/start", {
+        method: "POST",
+        body: JSON.stringify({ code: normalized }),
+      });
+      setOtpMessage(r.message);
+      if (r.nextStep === "enter_otp") {
+        setDestination(r.destination || "");
+        setResendIn(r.retryAfterSeconds ?? 0);
+        setStage("otp");
+      } else {
+        setStage("code");
+        setResendIn(0);
+        setError(r.message);
+      }
     } catch (e) {
+      setStage("code");
+      setResendIn(0);
       setError(
-        e instanceof Error ? e.message : "Could not find your invitation.",
+        e instanceof Error ? e.message : "Could not start verification.",
       );
     } finally {
       setLoading(false);
     }
+  }
+  async function unlock(e: React.FormEvent) {
+    e.preventDefault();
+    await beginVerify(code);
+  }
+  async function confirmOtp(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const r = await api<{ invitation: InvitationData }>(
+        "/api/family/verify/confirm",
+        {
+          method: "POST",
+          body: JSON.stringify({ code, otp }),
+        },
+      );
+      setData(r.invitation);
+      setStage("code");
+      setOtp("");
+      setOtpMessage("");
+      setDestination("");
+      setResendIn(0);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Verification failed.");
+    } finally {
+      setLoading(false);
+    }
+  }
+  async function logout() {
+    await api("/api/family/session", { method: "DELETE" }).catch(() => undefined);
+    setData(null);
+    setCode("");
+    setOtp("");
+    setStage("code");
+    setError("");
+    setResendIn(0);
+    setView("overview");
   }
   const refresh = useCallback(async () => {
     if (data) await load(data.invitation.code);
@@ -116,44 +210,134 @@ export default function StudentHome() {
         </span>
         <span className="badge purple">Private access</span>
       </div>
-      <h3>Your evening starts here.</h3>
-      <p>
-        Enter the invitation code shared by your school to unlock your pass and
-        register your guests.
-      </p>
-      <form onSubmit={unlock}>
-        <div className="input-row">
-          <label className="field">
-            <span>Invitation code</span>
-            <input
-              className="code-input"
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="ANL-…"
-              maxLength={64}
-              autoComplete="off"
-              autoCapitalize="characters"
-              required
-            />
-          </label>
-          <button className="button primary" disabled={loading || !code.trim()}>
-            {loading ? "Opening…" : "Open invitation"}
-            <Icon name="arrow" size={15} />
-          </button>
-        </div>
-        {error && (
-          <p className="notice error" role="alert">
-            {error}
+      {stage === "otp" ? (
+        <>
+          <h3>Check your verified contact.</h3>
+          <p>
+            {otpMessage}
+            {destination ? (
+              <>
+                {" "}
+                Sent to <strong>{destination}</strong>.
+              </>
+            ) : null}
           </p>
-        )}
-      </form>
-      <p className="security-note">
-        <Icon name="shield" size={13} />
-        Keep your code private. It gives access to your invitation.
-      </p>
-      <button className="text-button" onClick={() => setView("helpdesk")}>
-        Need your code? Find my invitation <Icon name="arrow" size={15} />
-      </button>
+          <form onSubmit={confirmOtp}>
+            <div className="input-row">
+              <label className="field">
+                <span>6-digit verification code</span>
+                <input
+                  className="code-input"
+                  value={otp}
+                  onChange={(e) =>
+                    setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+                  }
+                  placeholder="000000"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  required
+                />
+              </label>
+              <button
+                className="button primary"
+                disabled={loading || otp.length !== 6}
+              >
+                {loading ? "Verifying…" : "Verify"}
+                <Icon name="arrow" size={15} />
+              </button>
+            </div>
+            {error && (
+              <p className="notice error" role="alert">
+                {error}
+              </p>
+            )}
+          </form>
+          <p className="security-note">
+            <Icon name="shield" size={13} />
+            Never share this code. The school will never ask you for it.
+          </p>
+          {resendIn > 0 ? (
+            <p className="caption">
+              You can request a new code in {resendIn}s.
+            </p>
+          ) : null}
+          <div className="button-row">
+            <button
+              type="button"
+              className="text-button"
+              disabled={loading || resendIn > 0}
+              onClick={() => void beginVerify(code)}
+            >
+              {resendIn > 0 ? "Resend available shortly" : "Resend the code"}
+              <Icon name="arrow" size={15} />
+            </button>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => {
+                setStage("code");
+                setOtp("");
+                setError("");
+                setOtpMessage("");
+                setResendIn(0);
+              }}
+            >
+              Use a different code
+              <Icon name="arrow" size={15} />
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <h3>Your evening starts here.</h3>
+          <p>
+            Enter the invitation code shared by your school. To protect your
+            family, we send a 6-digit verification code to your registered
+            WhatsApp or Telegram contact before showing your pass or guest list.
+          </p>
+          <form onSubmit={unlock}>
+            <div className="input-row">
+              <label className="field">
+                <span>Invitation code</span>
+                <input
+                  className="code-input"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  placeholder="ANL-…"
+                  maxLength={64}
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  required
+                />
+              </label>
+              <button
+                className="button primary"
+                disabled={loading || !code.trim()}
+              >
+                {loading ? "Checking…" : "Continue"}
+                <Icon name="arrow" size={15} />
+              </button>
+            </div>
+            {error && (
+              <p className="notice error" role="alert">
+                {error}
+              </p>
+            )}
+          </form>
+          <p className="security-note">
+            <Icon name="shield" size={13} />
+            Your code alone does not reveal your guest list or QR pass.
+          </p>
+          <button className="text-button" onClick={() => setView("helpdesk")}>
+            Need your code? Find my invitation <Icon name="arrow" size={15} />
+          </button>
+        </>
+      )}
+      {checkingSession && (
+        <p className="caption">Checking for an existing verified session…</p>
+      )}
     </section>
   );
   const unlocked = (
@@ -198,16 +382,7 @@ export default function StudentHome() {
       onNavigate={setView}
       items={NAV}
       name={data?.studentName}
-      onLogout={
-        data
-          ? () => {
-              setData(null);
-              setCode("");
-              setError("");
-              setView("overview");
-            }
-          : undefined
-      }
+      onLogout={data ? logout : undefined}
     >
       <div className="page-heading">
         <div>
@@ -346,9 +521,8 @@ export default function StudentHome() {
           code={data?.invitation.code}
           onAction={refresh}
           onRecover={async (value) => {
-            await load(value);
-            setCode(value);
             setView("invitation");
+            await beginVerify(value);
           }}
         />
       )}

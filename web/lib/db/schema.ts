@@ -237,3 +237,96 @@ export const photos = pgTable("photos", {
 });
 export type Photo = typeof photos.$inferSelect;
 export type NewPhoto = typeof photos.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Family verification (two-factor: invitation code + OTP to a verified contact)
+// ---------------------------------------------------------------------------
+
+// A contact the school has verified for this invitation (admin-approved, or a
+// messaging endpoint captured after an identity-verified chat session). OTPs are
+// only ever sent here — never to a number supplied by an unverified visitor.
+export const familyContacts = pgTable("family_contacts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invitationId: uuid("invitation_id")
+    .notNull()
+    .unique()
+    .references(() => invitations.id, { onDelete: "cascade" }),
+  channel: text("channel").notNull(), // whatsapp | telegram
+  address: text("address").notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  // Who approved it: "admin:<id>" or "identity-recovery".
+  verifiedBy: text("verified_by"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// One row per issued OTP. Only a keyed HMAC and a random salt are stored.
+export const familyChallenges = pgTable("family_verification_challenges", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invitationId: uuid("invitation_id")
+    .notNull()
+    .references(() => invitations.id, { onDelete: "cascade" }),
+  purpose: text("purpose").notNull().default("family_manage"),
+  channel: text("channel").notNull(),
+  address: text("address").notNull(),
+  otpHash: text("otp_hash").notNull(),
+  salt: text("salt").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(5),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// Server-side session records so a session can be revoked even though the
+// cookie itself is a signed stateless token.
+export const familySessions = pgTable("family_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invitationId: uuid("invitation_id")
+    .notNull()
+    .references(() => invitations.id, { onDelete: "cascade" }),
+  code: text("code").notNull(),
+  scope: text("scope").notNull().default("family"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  ipHash: text("ip_hash"),
+  userAgent: text("user_agent"),
+});
+
+// Shared rate-limit buckets. Works across serverless instances, unlike an
+// in-process Map.
+export const familyRateLimits = pgTable("family_rate_limits", {
+  keyHash: text("key_hash").primaryKey(),
+  windowStart: timestamp("window_start", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  attempts: integer("attempts").notNull().default(1),
+});
+
+// Append-only security audit trail. Never contains OTPs or session tokens.
+export const securityAuditLog = pgTable("security_audit_log", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  at: timestamp("at", { withTimezone: true }).defaultNow().notNull(),
+  actorType: text("actor_type").notNull(), // family | staff | admin | gate | anonymous | system
+  actorId: text("actor_id"),
+  action: text("action").notNull(),
+  invitationId: uuid("invitation_id"),
+  invitationCode: text("invitation_code"),
+  ipHash: text("ip_hash"),
+  detail: jsonb("detail"),
+});
+
+export type FamilyContact = typeof familyContacts.$inferSelect;
+export type FamilyChallenge = typeof familyChallenges.$inferSelect;
+export type FamilySession = typeof familySessions.$inferSelect;

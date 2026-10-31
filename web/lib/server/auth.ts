@@ -31,9 +31,12 @@ function signature(value: string) {
     .update(value)
     .digest("base64url");
 }
-export function accessKeySession(role: Role = "admin") {
+export function accessKeySession(
+  role: Role = "admin",
+  ttlMs = 4 * 60 * 60 * 1000,
+) {
   const payload = Buffer.from(
-    JSON.stringify({ role, exp: Date.now() + 8 * 60 * 60 * 1000 }),
+    JSON.stringify({ role, exp: Date.now() + ttlMs }),
   ).toString("base64url");
   return `key.${payload}.${signature(payload)}`;
 }
