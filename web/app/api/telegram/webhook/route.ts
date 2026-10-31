@@ -6,7 +6,7 @@ import {
   parseTelegramUpdate,
   parseTelegramVoice,
 } from "@/lib/server/telegram/handler";
-import { downloadFile, sendDocument, sendMessage } from "@/lib/server/telegram/client";
+import { downloadFile, sendDocument, sendMessage, sendTyping } from "@/lib/server/telegram/client";
 import { heardPrefix, tooLong, transcribe, voiceReady } from "@/lib/server/telegram/voice";
 import { loadSession } from "@/lib/server/whatsapp/session";
 import { saveIncomingPhoto } from "@/lib/server/album";
@@ -20,7 +20,16 @@ export async function POST(req: Request) {
   // x-telegram-bot-api-secret-token header or it is rejected. When the env
   // is unset (local dev only), validation is skipped.
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (secret && req.headers.get("x-telegram-bot-api-secret-token") !== secret) {
+  if (!secret) {
+    // Development may run without a secret; production must never accept
+    // unauthenticated webhook posts (forged updates could trigger chat actions
+    // and photo uploads).
+    if (process.env.NODE_ENV === "production")
+      return NextResponse.json(
+        { error: "webhook not configured" },
+        { status: 503 },
+      );
+  } else if (req.headers.get("x-telegram-bot-api-secret-token") !== secret) {
     return NextResponse.json({ error: "bad secret" }, { status: 401 });
   }
   let body: unknown;
@@ -32,6 +41,9 @@ export async function POST(req: Request) {
   // Text messages go through the agent.
   const inbound = parseTelegramUpdate(body);
   if (inbound) {
+    // Show "typing…" straight away so the family sees the bot is working during
+    // the model round trip. Fire-and-forget: it must never delay the answer.
+    void sendTyping(inbound.chatId);
     // Per-message try/catch + always 200: Telegram retries aggressively on
     // non-2xx, so a poison message must not wedge the webhook — same
     // discipline as the WhatsApp route.

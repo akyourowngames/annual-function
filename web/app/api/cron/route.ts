@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { and, eq, lte } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { announcements } from "@/lib/db/schema";
+import { trimAuditLog } from "@/lib/server/audit-retention";
 import { requireStaff } from "@/lib/server/auth";
 import { parseAudience } from "@/lib/server/channels";
 import { sendAnnouncement } from "@/lib/server/delivery";
@@ -48,7 +49,16 @@ export async function GET(request: Request) {
           .where(eq(announcements.id, a.id));
       results.push({ id: a.id, sent: result.sent, failed: result.failed, remaining: result.remaining });
     }
-    return NextResponse.json({ processed: results.length, results });
+    // Trimming is housekeeping, not sending. A failure here is reported but
+    // never allowed to stop announcements, and the next run simply retries.
+    let trimmed: { deleted: number; retentionDays: number } | { error: string };
+    try {
+      trimmed = await trimAuditLog();
+    } catch (e) {
+      console.error("audit trim failed", e instanceof Error ? e.name : "unknown");
+      trimmed = { error: "trim failed" };
+    }
+    return NextResponse.json({ processed: results.length, results, trimmed });
   } catch (e) {
     console.error("cron failed", e);
     return NextResponse.json({ error: "cron failed" }, { status: 500 });

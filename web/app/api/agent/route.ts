@@ -4,21 +4,23 @@ import { hasLlmKey } from "@/lib/server/llm-client";
 import { body, fail, HttpError, sameOrigin, text } from "@/lib/server/http";
 import { recoverInvitation } from "@/lib/server/invitation-recovery";
 import { parseRecoveryMessage } from "@/lib/invitations/identity";
+import { requireFamily } from "@/lib/server/family-auth";
+import { normalizeInvitationCode } from "@/lib/security/family";
+import { clientKey, enforceRateLimits } from "@/lib/server/rate-limit";
+
+// Legacy in-process counter. The database limiter below is authoritative —
+// it survives serverless cold starts and is shared across instances. This map
+// only keeps a second line of defence if the database is briefly unreachable.
 const requests = new Map<string, { count: number; until: number }>();
-export const maxDuration = 60;
-export async function GET() {
-  return NextResponse.json({
-    ok: true,
-    mode: hasLlmKey() ? "ai" : "official_information",
-  });
-}
-export async function POST(request: Request) {
+
+/** Shared-across-instances throttle; degrades to the local map if the DB fails. */
+async function limitQuestions(key: string) {
   try {
-    sameOrigin(request);
-    const b = await body(request);
-    const message = text(b.message, "Question", 2000, !b.recovery);
-    const key =
-      request.headers.get("x-forwarded-for")?.split(",")[0] || "local";
+    await enforceRateLimits([
+      { key: `agent:ask:ip:${key}`, limit: 30, windowSeconds: 600 },
+    ]);
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 429) throw e;
     const now = Date.now();
     if (requests.size > 10000)
       for (const [k, v] of requests) if (v.until < now) requests.delete(k);
@@ -32,8 +34,31 @@ export async function POST(request: Request) {
       count: usage && usage.until > now ? usage.count + 1 : 1,
       until: usage && usage.until > now ? usage.until : now + 600000,
     });
+  }
+}
+
+export const maxDuration = 60;
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    mode: hasLlmKey() ? "ai" : "official_information",
+  });
+}
+export async function POST(request: Request) {
+  try {
+    sameOrigin(request);
+    const b = await body(request);
+    const message = text(b.message, "Question", 2000, !b.recovery);
+    const key = clientKey(request);
+    await limitQuestions(key);
+    // A code-scoped chat may read the guest list, RSVP, and tickets. That
+    // requires a verified family session for exactly that invitation. Anonymous
+    // visitors can still ask general event questions and use identity recovery.
     const code =
-      text(b.code, "Invitation code", 64, false).toUpperCase() || undefined;
+      normalizeInvitationCode(
+        text(b.code, "Invitation code", 64, false),
+      ) || undefined;
+    if (code) await requireFamily(code);
     if (b.recovery && (typeof b.recovery !== "object" || Array.isArray(b.recovery)))
       throw new HttpError("Please enter your admission number, full name, and class.");
     const recovery = b.recovery || (!code && parseRecoveryMessage(message));

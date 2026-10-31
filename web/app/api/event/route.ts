@@ -3,6 +3,7 @@ import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { eventSettings } from "@/lib/db/schema";
 import { requireStaff } from "@/lib/server/auth";
+import { invalidateEventCache } from "@/lib/server/helpdesk";
 import { body, fail, HttpError, sameOrigin, text } from "@/lib/server/http";
 export async function GET() {
   try {
@@ -53,6 +54,9 @@ export async function PUT(request: Request) {
           .where(eq(eventSettings.id, current.id))
           .returning()
       : await db.insert(eventSettings).values(values).returning();
+    // Drop the assistant's cached copy so the next family question sees the
+    // edit immediately rather than up to LLM_EVENT_CACHE_MS later.
+    invalidateEventCache();
     return NextResponse.json({ event });
   } catch (e) {
     return fail(e);

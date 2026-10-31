@@ -12,6 +12,10 @@ import { supportTickets } from "@/lib/db/schema";
 import { sendTextTo } from "@/lib/server/delivery";
 import type { Channel } from "@/lib/server/channels";
 import { requireStaff } from "@/lib/server/auth";
+import { requireFamily } from "@/lib/server/family-auth";
+import { normalizeInvitationCode } from "@/lib/security/family";
+import { audit } from "@/lib/server/audit";
+import { clientKey } from "@/lib/server/rate-limit";
 import {
   body,
   fail,
@@ -22,20 +26,24 @@ import {
 } from "@/lib/server/http";
 export async function GET(request: NextRequest) {
   try {
-    const code = request.nextUrl.searchParams.get("code");
+    const code = normalizeInvitationCode(
+      request.nextUrl.searchParams.get("code"),
+    );
     let studentId: string | undefined;
-    if (code)
-      studentId = (
-        await studentForCode(text(code, "Invitation code", 64).toUpperCase())
-      ).studentId;
-    else await requireStaff();
+    if (code) {
+      await requireFamily(code);
+      studentId = (await studentForCode(code)).studentId;
+    } else await requireStaff();
     const rows = await listTickets(studentId);
-    return NextResponse.json({
-      tickets: rows.map((r) => ({
-        ...r.ticket,
-        student: { studentId: r.student.studentId, name: r.student.name },
-      })),
-    });
+    return NextResponse.json(
+      {
+        tickets: rows.map((r) => ({
+          ...r.ticket,
+          student: { studentId: r.student.studentId, name: r.student.name },
+        })),
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (e) {
     return fail(e);
   }
@@ -49,13 +57,22 @@ export async function POST(request: Request) {
         "Open your invitation before sending a request.",
         401,
       );
-    const student = await studentForCode(
-      text(b.code, "Invitation code", 64).toUpperCase(),
-    );
+    const code = normalizeInvitationCode(b.code);
+    if (!code) throw new HttpError("Invitation code is required.");
+    const session = await requireFamily(code);
+    const student = await studentForCode(code);
     const result = await createTicket({
       studentId: student.studentId,
       category: text(b.category, "Category", 100, false) || "Other",
       description: text(b.description, "Request", 2000),
+    });
+    await audit({
+      actorType: "family",
+      action: "ticket.created",
+      invitationId: session.session.invitationId,
+      invitationCode: code,
+      ip: clientKey(request),
+      detail: { ticketId: result.ticket.id },
     });
     return NextResponse.json({ ticket: result.ticket }, { status: 201 });
   } catch (e) {

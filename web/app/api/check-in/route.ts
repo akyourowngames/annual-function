@@ -7,6 +7,8 @@ import {
   studentForCode,
 } from "@/lib/db/queries";
 import { requireCheckIn } from "@/lib/server/auth";
+import { audit } from "@/lib/server/audit";
+import { clientKey } from "@/lib/server/rate-limit";
 import {
   body,
   fail,
@@ -52,6 +54,15 @@ export async function POST(request: Request) {
       qrToken: text(b.qrToken, "QR token", 100),
       guestId: b.guestId ? uuid(b.guestId) : undefined,
       checkedInBy: staff.id,
+    });
+    await audit({
+      actorType: staff.role === "gate" ? "gate" : staff.role,
+      actorId: staff.id,
+      action: "admission.checked_in",
+      invitationId: result.invitation.id,
+      invitationCode: result.invitation.invitationCode,
+      ip: clientKey(request),
+      detail: { guestId: result.checkIn.guestId },
     });
     return NextResponse.json(
       {

@@ -18,6 +18,8 @@ import {
   text,
 } from "@/lib/server/http";
 import { newInvitationCode, newQrToken } from "@/lib/invitations/codes";
+import { audit } from "@/lib/server/audit";
+import { clientKey } from "@/lib/server/rate-limit";
 export async function GET() {
   try {
     const staff = await requireStaff();
@@ -98,7 +100,7 @@ export async function GET() {
 export async function PATCH(request: Request) {
   try {
     sameOrigin(request);
-    await requireStaff(true);
+    const staff = await requireStaff(true);
     const b = await body(request);
     if (b.codes !== undefined || b.audience !== undefined || b.className !== undefined) {
       if (b.guestLimit === undefined)
@@ -150,6 +152,15 @@ export async function PATCH(request: Request) {
       });
       const updatedCodes = new Set(updated.map((u) => u.code));
       const skipped = codes.filter((c) => !updatedCodes.has(c));
+      // Bulk guest-limit edits change admission capacity for many families at
+      // once, so they must be attributable after the event.
+      await audit({
+        actorType: staff.role === "admin" ? "admin" : "staff",
+        actorId: staff.id,
+        action: "invitation.bulk_guest_limit",
+        ip: clientKey(request),
+        detail: { guestLimit: limit, updated: updated.length, skipped: skipped.length },
+      });
       return NextResponse.json({
         invitation: { updated: updated.length, skipped },
       });
@@ -199,6 +210,22 @@ export async function PATCH(request: Request) {
         .where(eq(invitations.id, inv.id))
         .returning();
       return updated;
+    });
+    // Single-invitation edits: status changes and code regeneration are both
+    // security-relevant (a regenerated code invalidates a printed pass), so
+    // record who did it and what changed.
+    await audit({
+      actorType: staff.role === "admin" ? "admin" : "staff",
+      actorId: staff.id,
+      action: "invitation.updated",
+      invitationId: result?.id ?? null,
+      invitationCode: result?.invitationCode ?? null,
+      ip: clientKey(request),
+      detail: {
+        guestLimit: b.guestLimit !== undefined ? integer(b.guestLimit, "Guest limit") : undefined,
+        status: typeof b.status === "string" ? b.status : undefined,
+        regenerated: b.regenerate === true || undefined,
+      },
     });
     return NextResponse.json({ invitation: result });
   } catch (e) {
