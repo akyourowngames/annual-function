@@ -76,7 +76,13 @@ export function nextMenuStep(step: WaStep, raw: string, buttonId?: string): { st
     if (pick === "2" || pick.includes("question") || pick.includes("ask") || pick.includes("sawal")) return { step: "faq" };
     return { step: "idle" };
   }
-  if (step === "faq") return { step: "faq" };
+  // Inside the FAQ state, "1" still means "my invitation". Without this a
+  // connected family that typed 1 stayed in the FAQ loop and never got a pass.
+  if (step === "faq") {
+    if (pick === "1" || pick === "invite") return { step: "await_admission" };
+    if (pick === "2" || pick === "faq") return { step: "faq" };
+    return { step: "faq" };
+  }
   const value = raw.trim();
   if (!value) return { step };
   return { step, value }; // stepwise verify: handler stores value and advances

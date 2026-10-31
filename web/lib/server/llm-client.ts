@@ -3,19 +3,38 @@
 // OpenAI-compatible Chat Completions shape, so any gateway works — Kilo,
 // OpenAI, OpenRouter, Groq, ... — by setting LLM_BASE_URL / LLM_API_KEY /
 // LLM_MODEL. No code change to swap providers.
+// The extension is explicit so this module also loads under plain `node --test`,
+// which does not apply Next's extensionless resolution.
+import { answerBudgetMs, minAttemptMs, perAttemptMs } from "./llm-tuning.ts";
+
+const DEFAULT_BASE_URL = "https://ai-gateway.kilo.ai/api/v1";
+
+// Default model: a FIXED model, not an auto-router.
+//
+// kilo-auto/* routes each request to a different upstream model. Measured over
+// repeated runs, kilo-auto/small answered 5/5 but ranged 1.25s–23.6s on the
+// same question — one slow outlier is exactly what makes the bot "feel slow".
+// cohere/north-mini-code:free answered 5/5 in 1.0s–1.4s, and produced grounded,
+// one-round replies for the real helpdesk questions.
+//
+// Selection criteria, in order: (1) returns visible text, (2) answers every
+// time, (3) consistent latency, not just a good median.
+const DEFAULT_MODEL = "cohere/north-mini-code:free";
+
 export function llmConfig() {
-  const baseUrl = (process.env.LLM_BASE_URL || "https://api.kilo.ai/api/gateway").replace(/\/+$/, "");
+  const baseUrl = (process.env.LLM_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
   const apiKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || "";
-  const model = process.env.LLM_MODEL || process.env.OPENAI_MODEL || "kilo-auto/free";
+  const model = process.env.LLM_MODEL || process.env.OPENAI_MODEL || DEFAULT_MODEL;
   return { baseUrl, apiKey, model };
 }
-// Free models come and go (one can start timing out mid-day). We try the
-// configured model first, then these, so the family always gets an answer.
+// Ordered by measured consistency, not by best-case speed. Every entry must
+// return real text: a reasoning-only model (kilo-auto/free) returns empty
+// `content` and costs ~12s before we discover that.
 const DEFAULT_FALLBACKS = [
-  "kilo-auto/free",
-  "inclusionai/ling-3.0-flash-sante:free",
-  "stepfun/step-3.7-flash:free",
+  "cohere/north-mini-code:free",
   "openrouter/free",
+  "kilo-auto/small",
+  "reflection/beam-free",
 ];
 export function modelChain(): string[] {
   const configured = (process.env.LLM_MODEL_FALLBACKS || "")
@@ -59,18 +78,19 @@ export type ChatCompletionResponse = {
 
 export async function chatCompletion(
   body: ChatCompletionRequest,
-  budgetMs = 45000,
+  budgetMs = answerBudgetMs(),
 ): Promise<ChatCompletionResponse> {
   const { baseUrl, apiKey } = llmConfig();
   if (!apiKey) throw new Error("LLM API key is not configured");
   const requested = body.model || llmConfig().model;
   const chain = [...new Set([requested, ...modelChain()])];
   const start = Date.now();
-  const perAttempt = 12000;
+  const perAttempt = perAttemptMs();
+  const minAttempt = minAttemptMs();
   let lastError: unknown = null;
   for (const model of chain) {
     const remaining = budgetMs - (Date.now() - start);
-    if (remaining < 1500) break;
+    if (remaining < minAttempt) break;
     try {
       const res = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",

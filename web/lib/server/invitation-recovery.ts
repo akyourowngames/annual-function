@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { invitations, students } from "@/lib/db/schema";
+import { familyContacts, invitations, students } from "@/lib/db/schema";
 import { identityMatches, type StudentIdentity } from "@/lib/invitations/identity";
 import { HttpError, text } from "./http";
 
@@ -41,7 +41,12 @@ export async function recoverInvitation(raw: Record<string, unknown>, clientKey:
   };
   await limitAttempts(clientKey, input.admissionNumber);
   const [row] = await getDb()
-    .select({ student: students, code: invitations.invitationCode, status: invitations.status })
+    .select({
+      student: students,
+      code: invitations.invitationCode,
+      status: invitations.status,
+      invitationId: invitations.id,
+    })
     .from(students)
     .innerJoin(invitations, eq(invitations.studentId, students.id))
     .where(eq(students.studentId, input.admissionNumber))
@@ -55,10 +60,20 @@ export async function recoverInvitation(raw: Record<string, unknown>, clientKey:
       recoveryRequired: true,
     };
   }
+  // Knowing the identity triple proves knowledge, not possession. The QR pass is
+  // a bearer admission credential, so it may only be released to a destination
+  // the school itself verified. Callers must honour this flag.
+  const [verified] = await getDb()
+    .select({ id: familyContacts.id })
+    .from(familyContacts)
+    .where(eq(familyContacts.invitationId, row.invitationId))
+    .limit(1);
   return {
     reply: `Your details match. Your invitation code is ${row.code}. Keep it private. Open your invitation below to view your pass and register guests.`,
     source: "Verified school invitation records",
     action: null,
     recoveredCode: row.code,
+    // Only true when a staff-verified contact exists for this invitation.
+    passReleaseAllowed: Boolean(verified),
   };
 }

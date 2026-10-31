@@ -40,6 +40,17 @@ async function botPostJson(method: string, payload: Record<string, unknown>): Pr
   return data.result;
 }
 
+// Shows "typing…" in the chat. Telegram clears it after ~5s, so callers should
+// not rely on it for long waits — but for the 1-3s an answer takes it removes
+// the dead air between the family's message and the reply.
+export async function sendTyping(chatId: string): Promise<void> {
+  try {
+    await botPostJson("sendChatAction", { chat_id: chatId, action: "typing" });
+  } catch {
+    // Cosmetic only — never let this break a reply.
+  }
+}
+
 export async function sendMessage(chatId: string, text: string): Promise<unknown> {
   // Render the model's light Markdown as Telegram HTML. If Telegram rejects
   // the entities for any reason, fall back to plain text so a reply never

@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { deliveries, invitationContacts, invitations, students } from "@/lib/db/schema";
+import { deliveries, familyContacts, invitationContacts, invitations, students } from "@/lib/db/schema";
 import { getGuestUsage } from "@/lib/db/queries";
 import { buildInvitationPdf } from "./whatsapp/pass";
 import { sendMessage as tgSendMessage, sendDocument as tgSendDocument } from "./telegram/client";
@@ -57,6 +57,12 @@ export type DeliveryOutcome = { status: "sent" | "failed" | "skipped"; channel?:
 
 // Send one family their personalized PDF pass + QR. Falls back to a text-only
 // message (with the code) if the document can't be delivered.
+//
+// The QR token inside the PDF is a bearer admission credential. A messaging
+// endpoint learned from a chat identity match is attacker-controllable (whoever
+// knows the admission triple can claim the code and overwrite the address), so
+// it may only ever receive the code, never the pass. The pass requires an
+// administrator-approved contact on file (/api/family/contact).
 export async function deliverInvitation(code: string): Promise<DeliveryOutcome> {
   const db = getDb();
   const [contact] = await db
@@ -64,8 +70,61 @@ export async function deliverInvitation(code: string): Promise<DeliveryOutcome> 
     .from(invitationContacts)
     .where(eq(invitationContacts.invitationCode, code))
     .limit(1);
-  if (!contact) return { status: "skipped", error: "No messaging contact yet" };
-  const channel = contact.channel as Channel;
+  // Is there an administrator-approved contact for this invitation? That, and
+  // only that, unlocks the QR pass.
+  const [invitation] = await db
+    .select({ id: invitations.id })
+    .from(invitations)
+    .where(eq(invitations.invitationCode, code))
+    .limit(1);
+  const [approved] = invitation
+    ? await db
+        .select()
+        .from(familyContacts)
+        .where(eq(familyContacts.invitationId, invitation.id))
+        .limit(1)
+    : [];
+  const target = approved
+    ? { channel: approved.channel as Channel, address: approved.address }
+    : contact
+      ? { channel: contact.channel as Channel, address: contact.address }
+      : null;
+  if (!target) return { status: "skipped", error: "No messaging contact yet" };
+  const channel = target.channel;
+
+  // No verified contact: hand over only the reference code. The family opens the
+  // pass in the portal behind the OTP check.
+  if (!approved) {
+    try {
+      await sendTextTo(
+        channel,
+        target.address,
+        `Aapka Annual Function invitation code: ${code}. Pass aur QR portal par code + OTP ke saath dekhein: /portal`,
+      );
+      await logDelivery({
+        kind: "invitation",
+        invitationCode: code,
+        channel,
+        address: target.address,
+        status: "sent",
+        sentAt: new Date(),
+        error: "unverified contact; code only (no QR pass)",
+      });
+      return { status: "sent", channel };
+    } catch (e) {
+      const error = e instanceof Error ? e.message : "send failed";
+      await logDelivery({
+        kind: "invitation",
+        invitationCode: code,
+        channel,
+        address: target.address,
+        status: "failed",
+        error,
+      });
+      return { status: "failed", channel, error };
+    }
+  }
+
   try {
     const u = await getGuestUsage(code);
     const pdf = await buildInvitationPdf({
@@ -76,7 +135,7 @@ export async function deliverInvitation(code: string): Promise<DeliveryOutcome> 
     });
     await sendDocumentTo(
       channel,
-      contact.address,
+      target.address,
       pdf,
       `invitation-${code}.pdf`,
       `Aapka Annual Function invitation taiyaar hai! Code: ${code}. Gate par ye QR dikhayein.`,
@@ -85,7 +144,7 @@ export async function deliverInvitation(code: string): Promise<DeliveryOutcome> 
       kind: "invitation",
       invitationCode: code,
       channel,
-      address: contact.address,
+      address: target.address,
       status: "sent",
       sentAt: new Date(),
     });
@@ -95,14 +154,14 @@ export async function deliverInvitation(code: string): Promise<DeliveryOutcome> 
     if (channel === "whatsapp") {
       try {
         await sendTextWithTemplateFallback(
-          contact.address,
+          target.address,
           `Aapka invitation code: ${code}. PDF portal se download karein: /portal`,
         );
         await logDelivery({
           kind: "invitation",
           invitationCode: code,
           channel,
-          address: contact.address,
+          address: target.address,
           status: "sent",
           sentAt: new Date(),
           error: "document failed; text fallback sent",
@@ -116,7 +175,7 @@ export async function deliverInvitation(code: string): Promise<DeliveryOutcome> 
       kind: "invitation",
       invitationCode: code,
       channel,
-      address: contact.address,
+      address: target.address,
       status: "failed",
       error,
     });

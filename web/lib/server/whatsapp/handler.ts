@@ -17,6 +17,8 @@ export type HandlerDeps = {
   usage: typeof getGuestUsage;
   createTicket: typeof createTicketForCode;
   recordContact?: (key: string, code: string) => Promise<void>;
+  /** True when the school has an approved OTP destination for this invitation. */
+  hasVerifiedContact: (code: string) => Promise<boolean>;
 };
 
 // NOTE on imports: the brain/DB modules (and ./session, which pulls
@@ -46,6 +48,8 @@ export const liveDeps: HandlerDeps = {
     import("../../db/queries").then((m) => m.createTicketForCode(input)),
   recordContact: (key, code) =>
     import("../delivery").then((m) => m.recordContact(key, code)),
+  hasVerifiedContact: (code: string) =>
+    import("../family-verification").then((m) => m.hasTrustedContact(code)),
 };
 
 const PORTAL_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://annual-five.vercel.app";
@@ -83,16 +87,26 @@ export async function handleInbound(inbound: Inbound, deps: HandlerDeps): Promis
   // persist() rebuilds from the stale `base` closure, so a trailing
   // persist({}) (e.g. inside say()) would otherwise wipe a just-stored code.
   let verifiedCode: string | undefined;
+  // Set when this turn deliberately ends the connection. `say()` must not then
+  // write the old code back, which is exactly what undid the switch.
+  let connectionCleared = false;
 
   const say = async (body: string) => {
     payload = pushHistory(payload, "assistant", body);
     await deps.sendText(waId, body);
+    if (connectionCleared && !verifiedCode) {
+      await persist({ invitationCode: null });
+      return;
+    }
     await persist(verifiedCode ? { invitationCode: verifiedCode } : {});
   };
   payload = pushHistory(payload, "user", inbound.text || inbound.buttonId || "");
 
+  // `...base` must come FIRST and the patch LAST. With base last, a stale
+  // invitationCode overwrote any clearing patch, so "I'm not this person" could
+  // never disconnect the chat.
   const persist = (patch: Partial<NewWhatsappSession>) =>
-    deps.saveSession({ ...base, waId, ...patch, step, payload, lastUserMsgAt: deps.now() });
+    deps.saveSession({ ...base, step, payload, lastUserMsgAt: deps.now(), waId, ...patch });
 
   // Menu routing on every message (buttons "invite"/"faq", numbers, keywords).
   const route = nextMenuStep(step, inbound.text, inbound.buttonId);
@@ -136,8 +150,60 @@ export async function handleInbound(inbound: Inbound, deps: HandlerDeps): Promis
     await say(menuText());
     return;
   }
+  // A connected family typing "1" from inside the FAQ state wants the pass, not
+  // a new verification. Handled before the idle-only branch below, which would
+  // otherwise loop them back into the menu.
+  if (route.step === "await_admission" && step !== "idle" && priorCode) {
+    try {
+      const u = await deps.usage(priorCode);
+      const pdf = await buildInvitationPdf({
+        code: u.invitation.invitationCode,
+        studentName: u.studentName,
+        guestLimit: u.invitation.guestLimit,
+        qrToken: u.invitation.qrToken,
+      });
+      await deps.sendPass(
+        waId,
+        pdf,
+        `invitation-${priorCode}.pdf`,
+        `Aapka invitation pass. Code: ${priorCode}. Gate par ye QR dikhayein.`,
+      );
+      await persist({});
+      return;
+    } catch (e) {
+      console.error("whatsapp pass on menu 1 failed", waId, priorCode, e);
+      await say(`PDF bhejne me dikkat aayi — portal se download karein: ${PORTAL_URL}/portal`);
+      return;
+    }
+  }
   if (step === "idle") {
     if (route.step === "await_admission") {
+      // "1" means "my invitation". If one is already connected, that IS the
+      // PDF — asking for an admission number again was a pointless hoop.
+      if (priorCode) {
+        try {
+          const u = await deps.usage(priorCode);
+          const pdf = await buildInvitationPdf({
+            code: u.invitation.invitationCode,
+            studentName: u.studentName,
+            guestLimit: u.invitation.guestLimit,
+            qrToken: u.invitation.qrToken,
+          });
+          step = "faq";
+          await deps.sendPass(
+            waId,
+            pdf,
+            `invitation-${priorCode}.pdf`,
+            `Aapka invitation pass. Code: ${priorCode}. Gate par ye QR dikhayein.`,
+          );
+          await persist({});
+          return;
+        } catch (e) {
+          console.error("whatsapp pass on menu 1 failed", waId, priorCode, e);
+          await say(`PDF bhejne me dikkat aayi — portal se download karein: ${PORTAL_URL}/portal`);
+          return;
+        }
+      }
       step = "await_admission";
       await say("Apna **admission number** bhejein. (Radd karne ke liye 'cancel' likhein.)");
       return;
@@ -181,6 +247,25 @@ export async function handleInbound(inbound: Inbound, deps: HandlerDeps): Promis
           console.error("contact capture failed", waId, e);
         }
       }
+      // The QR token is a bearer admission credential. A roster identity match
+      // proves knowledge, not possession, so the pass is only sent when the
+      // school has verified this family's contact. Fails closed: a missing flag
+      // means "not allowed".
+      if (!("passReleaseAllowed" in result) || result.passReleaseAllowed !== true) {
+        payload = { history: payload.history };
+        step = "idle";
+        await persist({ invitationCode: code });
+        // Do not promise an OTP the family cannot receive. With no approved
+        // contact on file the portal has nowhere to send a code, so pointing
+        // them there (the old wording) sent them into a dead end.
+        const canOtp = await deps.hasVerifiedContact(code).catch(() => false);
+        await say(
+          canOtp
+            ? `Aapke details match kar gaye. Invitation code: ${code}\nApna pass aur guest list dekhne ke liye portal kholein aur yahan code + OTP daalein: ${PORTAL_URL}/portal`
+            : `Aapke details match kar gaye. Invitation code: ${code}\n\nAbhi aapke number par OTP nahi bhej sakte, isliye portal se login nahi hoga. Pass ke liye yahan "pdf" likhein, ya school office se sampark karein.`,
+        );
+        return;
+      }
       try {
         const u = await deps.usage(code);
         const pdf = await buildInvitationPdf({
@@ -213,6 +298,47 @@ export async function handleInbound(inbound: Inbound, deps: HandlerDeps): Promis
 
   // FAQ path: RAG-grounded answer with the stored code + last-8 history.
   const res = await deps.answer(inbound.text, priorCode, payload.history ?? [], `wa:${waId}`);
+
+  // A family asked to leave the current invitation (wrong family, shared
+  // phone). Clear the connection and start verification fresh. Handled before
+  // recoveryRequired, which would otherwise swallow it as a plain hint.
+  if ("clearInvitation" in res && res.clearInvitation) {
+    step = "await_admission";
+    payload = { history: payload.history };
+    connectionCleared = true;
+    await persist({ invitationCode: null });
+    await say("reply" in res ? res.reply : "Invitation disconnected. Send your admission number to verify again.");
+    return;
+  }
+
+  // The family asked for their pass. Send the actual PDF rather than telling
+  // them to fetch it from a teacher.
+  if ("sendPass" in res && res.sendPass) {
+    if (!priorCode) {
+      await say("Open your invitation first, then ask me for the pass again.");
+      return;
+    }
+    try {
+      const u = await deps.usage(priorCode);
+      const pdf = await buildInvitationPdf({
+        code: u.invitation.invitationCode,
+        studentName: u.studentName,
+        guestLimit: u.invitation.guestLimit,
+        qrToken: u.invitation.qrToken,
+      });
+      await deps.sendPass(waId, pdf, `invitation-${priorCode}.pdf`, "Aapka invitation pass. Gate par ye QR dikhayein.");
+      // sendPass bypasses say(), so record the exchange explicitly; otherwise
+      // the family's request vanishes from the conversation history.
+      payload = pushHistory(payload, "assistant", "Sent the invitation PDF with the QR code.");
+      await persist({});
+      return;
+    } catch (e) {
+      console.error("whatsapp pass on request failed", waId, priorCode, e);
+      await say(`PDF bhejne me dikkat aayi — portal se download karein: ${PORTAL_URL}/portal`);
+      return;
+    }
+  }
+
   if ("recoveryRequired" in res && res.recoveryRequired) {
     step = "await_admission";
     await say("Iske liye pehle invitation verify karte hain. Apna **admission number** bhejein.");
