@@ -2,6 +2,7 @@ import { and, asc, count, desc, eq } from "drizzle-orm";
 import { getDb } from "./index";
 import {
   checkIns,
+  eventSettings,
   guests,
   invitationContacts,
   invitations,
@@ -11,6 +12,7 @@ import {
 } from "./schema";
 import { newInvitationCode, newQrToken } from "@/lib/invitations/codes";
 import { identityMatches } from "@/lib/invitations/identity";
+import { passState } from "@/lib/passes/expiry";
 import { HttpError } from "@/lib/server/http";
 /**
  * Backend-owned queries. The agent may REQUEST these actions, but the
@@ -167,6 +169,18 @@ export async function getInvitationByQrToken(qrToken: string) {
     .limit(1);
   return rows[0] ?? null;
 }
+/**
+ * The event-wide instant when passes stop working at the gate.
+ * Null means no expiry is set, so passes work until staff switch them off.
+ */
+export async function eventPassExpiry(): Promise<Date | null> {
+  const [row] = await getDb()
+    .select({ passExpiresAt: eventSettings.passExpiresAt })
+    .from(eventSettings)
+    .orderBy(desc(eventSettings.updatedAt))
+    .limit(1);
+  return row?.passExpiresAt ?? null;
+}
 /** Staff gate: check in by scanning the QR (invitation-level or per-guest). */
 export async function checkInByQrToken(input: {
   qrToken: string;
@@ -185,6 +199,21 @@ export async function checkInByQrToken(input: {
     if (!invitation) throw new Error("Invalid QR token");
     if (invitation.status !== "active")
       throw new Error("Invitation is not active");
+    // Hold the event setting row until check-in finishes. If staff change the
+    // expiry at the same time, either the entry saves first or it sees the new
+    // closing time; it cannot save afterward using an old time.
+    const [event] = await tx
+      .select({ passExpiresAt: eventSettings.passExpiresAt })
+      .from(eventSettings)
+      .orderBy(desc(eventSettings.updatedAt))
+      .limit(1)
+      .for("share");
+    const state = passState({
+      status: invitation.status,
+      expiresAt: event?.passExpiresAt ?? null,
+    });
+    if (state === "expired")
+      throw new Error("Cannot admit: this pass has expired");
     const [total] = await tx
       .select({ value: count() })
       .from(checkIns)

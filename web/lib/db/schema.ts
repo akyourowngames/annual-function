@@ -122,6 +122,9 @@ export const eventSettings = pgTable("event_settings", {
   entryInfo: text("entry_info"),
   // Public /gallery switch; approved photos only, off by default.
   galleryEnabled: boolean("gallery_enabled").notNull().default(false),
+  // One instant after which the gate refuses every pass. Null (the default)
+  // means passes never expire — the gate still refuses switched-off ones.
+  passExpiresAt: timestamp("pass_expires_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 export type Student = typeof students.$inferSelect;

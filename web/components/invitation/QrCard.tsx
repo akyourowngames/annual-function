@@ -4,21 +4,32 @@ import QRCode from "qrcode";
 import Image from "next/image";
 import Icon from "@/components/ui/Icon";
 import { formatDate, type EventInfo } from "@/lib/types";
+import {
+  formatPassMoment,
+  passClosedMessage,
+  passState,
+} from "@/lib/passes/expiry";
 export default function QrCard({
   studentName,
   code,
   guestCount,
   qrToken,
   event,
-  active = true,
+  status = "active",
+  expiresAt = null,
 }: {
   studentName: string;
   code: string;
   guestCount: number;
   qrToken: string;
   event?: EventInfo | null;
-  active?: boolean;
+  status?: string;
+  expiresAt?: string | null;
 }) {
+  // Same verdict the gate makes: a pass that looks fine here but bounces at the
+  // door is worse than one that says plainly that it has closed.
+  const state = passState({ status, expiresAt });
+  const active = state === "valid";
   const [url, setUrl] = useState<string | null>(null),
     [error, setError] = useState(false);
   useEffect(() => {
@@ -45,7 +56,11 @@ export default function QrCard({
         <header className="pass-header">
           <strong>{event?.eventName || "Annual Function 2026"}</strong>
           <span className={`badge ${active ? "success" : "warning"}`}>
-            {active ? "Entry pass" : "Inactive"}
+            {active
+              ? "Entry pass"
+              : state === "expired"
+                ? "Expired"
+                : "Inactive"}
           </span>
         </header>
         <div className="pass-body">
@@ -54,7 +69,10 @@ export default function QrCard({
           <p>You and your guests are warmly invited.</p>
           <div className="qr-frame">
             {!active ? (
-              <span>Contact the event team to reactivate this pass.</span>
+              <span>
+                {passClosedMessage(state, expiresAt) ||
+                  "Contact the event team to reactivate this pass."}
+              </span>
             ) : url ? (
               <Image
                 src={url}
@@ -75,6 +93,11 @@ export default function QrCard({
           <p>
             {guestCount} registered {guestCount === 1 ? "guest" : "guests"}
           </p>
+          {active && expiresAt && (
+            <p className="caption">
+              Valid until {formatPassMoment(expiresAt)}
+            </p>
+          )}
           <p>
             {formatDate(event?.eventDate)}
             {event?.startTime ? ` · ${event.startTime}` : ""}

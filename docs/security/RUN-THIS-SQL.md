@@ -188,10 +188,27 @@ message instead of a code. That is intended, not a bug.
 
 ---
 
+## 6. Optional — ticket pass expiry (`0014_pass_expiry.sql`)
+
+Adds one column that holds the moment the gate stops accepting every pass.
+Nothing changes until staff fill in a time: an empty value means passes keep
+working until an invitation is switched off, exactly as before.
+
+```bash
+cd web
+node scripts/migrate.mjs drizzle/migrations/0014_pass_expiry.sql
+```
+
+Then set the time in `/admin` → **Event settings** → **Passes stop working at**.
+Leave it empty until the closing night; clear it again if the date changes.
+
+---
+
 ## Quick copy-paste
 
 ```bash
 cd web
 node scripts/migrate.mjs drizzle/migrations/0004_family_verification.sql
 node scripts/migrate.mjs drizzle/migrations/0012_data_api_lockdown.sql
+node scripts/migrate.mjs drizzle/migrations/0014_pass_expiry.sql
 ```

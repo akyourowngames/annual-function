@@ -4,6 +4,11 @@ import { api, type GuestInfo, type InvitationData } from "@/lib/types";
 import Icon from "@/components/ui/Icon";
 type ScanResult = {
   valid: boolean;
+  /** "valid" | "inactive" | "expired" — why the pass is or is not usable. */
+  state: string;
+  /** The sentence to show the door staff when the pass is closed. */
+  message: string | null;
+  passExpiresAt: string | null;
   invitationCode: string;
   status: string;
   guestLimit: number;
@@ -221,7 +226,7 @@ export default function Scanner({
             <div className="section-heading space-top">
               <h3>{result.studentName}</h3>
               <span className={`badge ${result.valid ? "success" : "warning"}`}>
-                {result.status}
+                {result.state === "expired" ? "expired" : result.status}
               </span>
             </div>
             <p className="caption">
@@ -229,7 +234,8 @@ export default function Scanner({
             </p>
             {!result.valid && (
               <p className="notice error">
-                This invitation is inactive. Entry is not allowed.
+                {result.message ||
+                  "This invitation is inactive. Entry is not allowed."}
               </p>
             )}
             <ul className="guest-list">

@@ -7,6 +7,8 @@ export type EventInfo = {
   dressCode: string | null;
   parkingInfo: string | null;
   entryInfo: string | null;
+  /** When the gate stops accepting every pass; null means no expiry is set. */
+  passExpiresAt?: string | null;
 };
 export type GuestInfo = {
   id: string;

@@ -10,6 +10,8 @@ const port = 3101,
   base = `http://127.0.0.1:${port}`,
   key = randomBytes(32).toString("hex"),
   runId = `QA-${Date.now()}`;
+// One day puts the test time safely in the past without an unexplained delay.
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const db = postgres(process.env.DATABASE_URL, {
   max: 1,
   connect_timeout: 10,
@@ -17,6 +19,10 @@ const db = postgres(process.env.DATABASE_URL, {
 });
 const studentIds = [],
   documentIds = [];
+let eventSettingsId;
+let previousPassExpiry;
+let eventSettingsValues;
+let passExpiryChanged = false;
 const server = spawn(
   process.execPath,
   [
@@ -193,6 +199,52 @@ try {
   );
   check("disabled invitation cannot register guests", r.status === 409);
   await request("PATCH", "/api/admin", { code: inv.code, status: "active" });
+  // --- Ticket expiry: one moment must close every pass at the gate ---
+  const [eventRow] =
+    await db`select id, pass_expires_at from event_settings order by updated_at desc limit 1`;
+  assert.ok(eventRow, "An event settings row is needed for the expiry test");
+  eventSettingsId = eventRow.id;
+  previousPassExpiry = eventRow.pass_expires_at;
+  r = await request("GET", "/api/event", undefined, false);
+  assert.ok(r.json.event, "The event settings page must return its saved values");
+  eventSettingsValues = r.json.event;
+  r = await request("PUT", "/api/event", {
+    eventName: "Annual Function 2026",
+    passExpiresAt: "not-a-date",
+  });
+  check("pass expiry rejects an unreadable moment", r.status === 400);
+  const dayAgo = new Date(Date.now() - DAY_IN_MS).toISOString();
+  passExpiryChanged = true;
+  r = await request("PUT", "/api/event", {
+    ...eventSettingsValues,
+    passExpiresAt: dayAgo,
+  });
+  check(
+    "event settings save the pass expiry",
+    r.status === 200 &&
+      new Date(r.json.event.passExpiresAt).getTime() === Date.parse(dayAgo),
+  );
+  r = await request("GET", `/api/check-in?qrToken=${inv.qrToken}`);
+  check(
+    "expired pass reads as closed at the gate",
+    r.status === 200 && r.json.valid === false && r.json.state === "expired",
+  );
+  r = await request("POST", "/api/check-in", {
+    qrToken: inv.qrToken,
+    guestId: second.id,
+  });
+  check("expired pass cannot enter", r.status === 409);
+  r = await request("PUT", "/api/event", {
+    ...eventSettingsValues,
+    passExpiresAt: eventSettingsValues.passExpiresAt ?? "",
+  });
+  check(
+    "event settings clear the pass expiry",
+    r.status === 200 && r.json.event.passExpiresAt === null,
+  );
+  passExpiryChanged = false;
+  r = await request("GET", `/api/check-in?qrToken=${inv.qrToken}`);
+  check("clearing the expiry reopens the pass", r.json.valid === true);
   r = await request(
     "POST",
     "/api/tickets",
@@ -368,6 +420,10 @@ try {
   if (browser) await browser.close();
   // Only records whose exact IDs were allocated by this run are removed.
   try {
+    if (passExpiryChanged && eventSettingsId !== undefined) {
+      await db`update event_settings set pass_expires_at = ${previousPassExpiry} where id = ${eventSettingsId}`;
+      console.log("Event pass expiry restored.");
+    }
     await db.begin(async (tx) => {
       for (const id of documentIds)
         await tx`delete from event_documents where id=${id}`;
