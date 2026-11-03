@@ -44,6 +44,8 @@ jobs:
           scripts/llm-tuning-test.mjs
           scripts/chat-dead-ends-test.mjs
           scripts/audit-retention-test.mjs
+      - name: Ticket pass expiry test
+        run: npm run test:passes
 
   agent:
     name: Backstage assistant (python)

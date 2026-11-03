@@ -12,6 +12,7 @@
     "test:e2e": "node scripts/product-test.mjs",
     "test:landing": "node scripts/landing-check.mjs",
     "test:security": "node --test scripts/security-unit-test.mjs",
+    "test:passes": "node --experimental-strip-types --test scripts/pass-expiry-test.mjs",
     "test:security:live": "node scripts/security-test.mjs",
     "studio": "drizzle-kit studio"
   },

@@ -15,6 +15,13 @@ type Source = {
   chunkCount: number;
   charCount: number;
 };
+/** ISO timestamp → the "YYYY-MM-DDTHH:mm" a datetime picker shows, in local time. */
+function pickerValue(iso?: string | null) {
+  const at = iso ? new Date(iso) : null;
+  if (!at || Number.isNaN(at.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}T${pad(at.getHours())}:${pad(at.getMinutes())}`;
+}
 export default function EventEditor() {
   const [event, setEvent] = useState<EventInfo | null>(null),
     [docs, setDocs] = useState<Document[]>([]),
@@ -36,6 +43,7 @@ export default function EventEditor() {
             dressCode: null,
             parkingInfo: null,
             entryInfo: null,
+            passExpiresAt: null,
           },
         ),
       )
@@ -55,11 +63,21 @@ export default function EventEditor() {
     setBusy(true);
     setError("");
     try {
+      const form = new FormData(e.currentTarget);
+      const payload: Record<string, string> = Object.fromEntries(form) as Record<
+        string,
+        string
+      >;
+      // The picker hands back a wall-clock time with no timezone. Convert it
+      // here, so the moment saved is the office's local time rather than the
+      // server's UTC clock.
+      const expiry = String(form.get("passExpiresAt") ?? "");
+      payload.passExpiresAt = expiry ? new Date(expiry).toISOString() : "";
       const r = await api<{
         event: EventInfo;
       }>("/api/event", {
         method: "PUT",
-        body: JSON.stringify(Object.fromEntries(new FormData(e.currentTarget))),
+        body: JSON.stringify(payload),
       });
       setEvent(r.event);
       setNotice(
@@ -163,6 +181,14 @@ export default function EventEditor() {
                   </label>
                 ))}
                 <label className="field wide">
+                  <span>Passes stop working at (optional)</span>
+                  <input
+                    name="passExpiresAt"
+                    type="datetime-local"
+                    defaultValue={pickerValue(event.passExpiresAt)}
+                  />
+                </label>
+                <label className="field wide">
                   <span>Parking information</span>
                   <textarea
                     name="parkingInfo"
@@ -179,6 +205,11 @@ export default function EventEditor() {
                   />
                 </label>
               </div>
+              <p className="caption" style={{ marginBottom: 18 }}>
+                After that moment every ticket QR is refused at the gate, even
+                when the invitation is still active. Leave it empty and passes
+                keep working until you switch an invitation off.
+              </p>
               <button className="button primary" disabled={busy}>
                 Publish event details
               </button>

@@ -14,6 +14,7 @@ import {
   type EventInfo,
   type InvitationData,
 } from "@/lib/types";
+import { passState } from "@/lib/passes/expiry";
 const NAV = [
   { id: "overview", label: "Overview", icon: "grid" },
   { id: "invitation", label: "My invitation", icon: "ticket" },
@@ -340,6 +341,12 @@ export default function StudentHome() {
       )}
     </section>
   );
+  const passVerdict = data
+    ? passState({
+        status: data.invitation.status,
+        expiresAt: event?.passExpiresAt ?? null,
+      })
+    : null;
   const unlocked = (
     <section className="panel invitation-panel">
       <div className="invitation-top">
@@ -348,9 +355,9 @@ export default function StudentHome() {
           Your personal invitation
         </span>
         <span
-          className={`badge ${data?.invitation.status === "active" ? "success" : "warning"}`}
+          className={`badge ${passVerdict === "valid" ? "success" : "warning"}`}
         >
-          {data?.invitation.status}
+          {passVerdict}
         </span>
       </div>
       <h3>{data?.studentName}, you’re on the list.</h3>
@@ -448,7 +455,8 @@ export default function StudentHome() {
                 guestCount={data.registered}
                 qrToken={data.invitation.qrToken}
                 event={event}
-                active={data.invitation.status === "active"}
+                status={data.invitation.status}
+                expiresAt={event?.passExpiresAt ?? null}
               />
             </div>
             <div className="no-print">

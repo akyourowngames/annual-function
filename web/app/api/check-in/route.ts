@@ -2,10 +2,12 @@
 import {
   checkInByQrToken,
   countCheckIns,
+  eventPassExpiry,
   getInvitationByQrToken,
   listGuests,
   studentForCode,
 } from "@/lib/db/queries";
+import { passClosedMessage, passState } from "@/lib/passes/expiry";
 import { requireCheckIn } from "@/lib/server/auth";
 import { audit } from "@/lib/server/audit";
 import { clientKey } from "@/lib/server/rate-limit";
@@ -27,13 +29,23 @@ export async function GET(request: NextRequest) {
     );
     const invitation = await getInvitationByQrToken(token);
     if (!invitation) throw new HttpError("Invalid QR token", 404);
-    const [checkIns, guests, student] = await Promise.all([
+    const [checkIns, guests, student, expiresAt] = await Promise.all([
       countCheckIns(invitation.id),
       listGuests(invitation.id),
       studentForCode(invitation.invitationCode),
+      eventPassExpiry(),
     ]);
+    // One verdict, computed by the same rule the check-in itself uses: the gate
+    // must never show a green pass that the next tap would refuse.
+    const state = passState({
+      status: invitation.status,
+      expiresAt,
+    });
     return NextResponse.json({
-      valid: invitation.status === "active",
+      valid: state === "valid",
+      state,
+      message: passClosedMessage(state, expiresAt),
+      passExpiresAt: expiresAt,
       invitationCode: invitation.invitationCode,
       status: invitation.status,
       guestLimit: invitation.guestLimit,
